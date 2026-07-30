@@ -1,0 +1,21 @@
+{
+  "name": "vrt",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:auth": "npm run dev --prefix auth",
+    "dev:upload": "npm run dev --prefix upload",
+    "dev:frontend": "npm run ios --prefix frontend",
+    "dev": "concurrently --raw \"npm:dev:auth\" \"npm:dev:upload\" \"npm:dev:frontend\"",
+    "dev1": "concurrently -n auth,upload,frontend -c blue,green,magenta \"npm:dev:auth\" \"npm:dev:upload\" \"npm:dev:frontend\""
+
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "concurrently": "^10.0.4"
+  }
+}

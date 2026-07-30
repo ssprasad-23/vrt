@@ -1,0 +1,78 @@
+import { StyleSheet} from 'react-native';
+
+
+
+export default StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  container: {
+    marginHorizontal: 24,
+    backgroundColor: '#1c1c1e',
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  title: { fontSize: 24, fontWeight: '600', textAlign: 'center', marginBottom: 20, color: '#fff' },
+  input: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    justifyContent: 'center',
+    color: '#fff',
+  },
+  inputText: { color: '#fff' },
+  phoneRow: { flexDirection: 'row', marginBottom: 12 },
+  phoneCode: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 14,
+    marginRight: 8,
+    justifyContent: 'center',
+    minWidth: 76,
+  },
+  phoneInput: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 14,
+    color: '#fff',
+  },
+  codeList: { maxHeight: 320 },
+  primaryButton: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  primaryButtonText: { color: '#000', fontWeight: '600', fontSize: 16 },
+  buttonDisabled: { opacity: 0.5 },
+  row: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
+  muted: { color: '#8E8E93' },
+  link: { color: '#fff', fontWeight: '600' },
+
+  // modal
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+  modalCard: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 16,
+    padding: 12,
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  modalTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8, textAlign: 'center', color: '#fff' },
+  pickersRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  pickerCol: { flex: 1, marginHorizontal: 4, maxHeight: 320 },
+  pickerItem: { paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderColor: '#2c2c2e' },
+  pickerItemActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  pickerText: { textAlign: 'center', color: '#fff' },
+  modalActions: { marginTop: 8, alignItems: 'center' },
+  btnGhost: { paddingHorizontal: 16, paddingVertical: 8 },
+  btnGhostText: { color: '#fff', fontWeight: '600' },
+});
