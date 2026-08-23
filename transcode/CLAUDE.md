@@ -33,7 +33,7 @@ Express 5 REST API using ES modules (`"type": "module"`). Structure mirrors the 
 
 **S3** (`src/utility/s3.js`): reuses `upload`'s bucket/credentials env vars. `buildAv1EncodedKey(videoId, container)` → `av1-encoded/{videoId}.{container}` — a top-level folder in the same bucket as `upload`'s `original/{userId}/...` uploads. Unlike `upload` (which only ever hands out presigned PUT URLs for direct client upload), this service has the encoded bytes on disk, so it uploads directly via `@aws-sdk/lib-storage`'s `Upload` (streamed, no full-file buffering). `generateDownloadUrl()` mirrors `upload`'s presigned-URL pattern but for `GetObjectCommand`.
 
-**Auth**: this service does not issue tokens — it only verifies them, identically to `upload`. `ACCESS_TOKEN_SECRET` must match the `auth` service's value exactly. Only gates the HTTP route — the BullMQ worker has no auth of its own, since a queue job is assumed to come from a trusted internal producer.
+**Auth**: this service no longer verifies JWTs at all — the `gateway` service does that once, up front, and forwards the caller's identity as trusted headers. `src/middleware/authenticate.js` just checks `x-gateway-secret` matches `GATEWAY_SECRET` (must equal the gateway's value) and reads `req.user` off `x-user-id`/`x-user-email` — no `jsonwebtoken` dependency, no `ACCESS_TOKEN_SECRET` here anymore. Only gates the HTTP route — the BullMQ worker has no auth of its own, since a queue job is assumed to come from a trusted internal producer. See `gateway/CLAUDE.md` for the full auth model.
 
 ## Where things live
 
@@ -48,12 +48,12 @@ Express 5 REST API using ES modules (`"type": "module"`). Structure mirrors the 
 - Source video download → `src/utility/download.js`
 - S3 key generation, upload, presigned download URL → `src/utility/s3.js`
 - Table creation on startup → `src/data/createTable.js`, SQL in `src/data/transcodeJobsTable.sql`
-- Bearer-token auth middleware (verify-only, copied from `upload`/`auth`) → `src/middleware/authenticate.js`, `src/utility/tokens.js`
+- Trust-the-gateway auth middleware (checks `x-gateway-secret`, reads identity off `x-user-id`/`x-user-email`) → `src/middleware/authenticate.js`
 - Server bootstrap, DB health check, global error handler, worker startup → `server.js`
 
 ## Local dev / run instructions
 
-Requires: a running PostgreSQL instance, a local S3-compatible store (MinIO), a running Redis instance, `ffmpeg` on PATH built with AV1 encoder support, and a `.env` file with `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `ACCESS_TOKEN_SECRET` (must match the `auth` service), `S3_ENDPOINT`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` (same bucket as `upload`), `REDIS_HOST`, `REDIS_PORT` (optionally `REDIS_PASSWORD`, `TRANSCODE_QUEUE_NAME`, `TRANSCODE_CONCURRENCY`, `FFMPEG_PATH`, `TRANSCODE_TMP_DIR`).
+Requires: a running PostgreSQL instance, a local S3-compatible store (MinIO), a running Redis instance, `ffmpeg` on PATH built with AV1 encoder support, and a `.env` file with `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `GATEWAY_SECRET` (must match the `gateway` service), `S3_ENDPOINT`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` (same bucket as `upload`), `REDIS_HOST`, `REDIS_PORT` (optionally `REDIS_PASSWORD`, `TRANSCODE_QUEUE_NAME`, `TRANSCODE_CONCURRENCY`, `FFMPEG_PATH`, `TRANSCODE_TMP_DIR`).
 
 ```bash
 npm start        # run server

@@ -4,12 +4,13 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:gateway": "npm run dev --prefix gateway",
     "dev:auth": "npm run dev --prefix auth",
     "dev:upload": "npm run dev --prefix upload",
     "dev:transcode": "npm run dev --prefix transcode",
     "dev:frontend": "npm run ios --prefix frontend",
-    "dev": "concurrently --raw \"npm:dev:auth\" \"npm:dev:upload\" \"npm:dev:transcode\" \"npm:dev:frontend\"",
-    "dev1": "concurrently -n auth,upload,transcode,frontend -c blue,green,yellow,magenta \"npm:dev:auth\" \"npm:dev:upload\" \"npm:dev:transcode\" \"npm:dev:frontend\""
+    "dev": "concurrently --raw \"npm:dev:gateway\" \"npm:dev:auth\" \"npm:dev:upload\" \"npm:dev:transcode\" \"npm:dev:frontend\"",
+    "dev1": "concurrently -n gateway,auth,upload,transcode,frontend -c cyan,blue,green,yellow,magenta \"npm:dev:gateway\" \"npm:dev:auth\" \"npm:dev:upload\" \"npm:dev:transcode\" \"npm:dev:frontend\""
 
   },
   "keywords": [],
