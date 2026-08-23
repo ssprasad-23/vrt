@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS videos (
-    video_id UUID PRIMARY KEY,
+    video_id VARCHAR(12) PRIMARY KEY,
     user_id INTEGER NOT NULL,
     s3_key VARCHAR(1024) NOT NULL UNIQUE,
     original_filename VARCHAR(255) NOT NULL,

@@ -1,6 +1,6 @@
-import { v4 as uuidv4 } from 'uuid';
 import { createVideoService, findVideoById, markVideoUploaded } from "../models/videoModels.js"
 import { buildVideoKey, generateUploadUrl } from '../utility/s3.js';
+import { generateVideoId } from '../utility/videoId.js';
 
 //Standardise response function
 const handleResponse = (res, status, message, data=null) => {
@@ -23,8 +23,8 @@ export const initUpload = async (req, res, next) => {
         return handleResponse(res, 400, "description and category are required")
     }
     try {
-        // one id, used for both the S3 key and the DB row
-        const videoId = uuidv4()
+        // videoID used for both the S3 key and the DB row
+        const videoId = generateVideoId()
         const contentType = DEFAULT_CONTENT_TYPE
         const filename = `${videoId}.mp4`
 
