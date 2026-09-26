@@ -5,21 +5,21 @@ import { spawnFfmpeg } from './ffmpeg.js';
 
 const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
 
-// Only videos up to 60s are supported for now. Containers often report a hair over
-// the nominal length (e.g. 60.02s), so allow a small tolerance before rejecting.
-export const MAX_VIDEO_DURATION_SECONDS = 60;
+// Only videos up to 120s are supported for now. Containers often report a hair over
+// the nominal length (e.g. 120.02s), so allow a small tolerance before rejecting.
+export const MAX_VIDEO_DURATION_SECONDS = 120;
 const DURATION_TOLERANCE_SECONDS = 1;
 
-// One frame is picked at a random point inside each window: 0-10s, 10-20s, ... 50-60s.
+// One frame is picked at a random point inside each window: 0-10s, 10-20s, 20-30s, ...
+// for the whole length of the video.
 const SEGMENT_SECONDS = 10;
 
 // Seeking to the very last instant can return no frame, so stay this far from the end.
 const END_MARGIN_SECONDS = 0.5;
 
-// Returns the source video's duration in seconds, via ffprobe.
-export function probeDuration(inputPath) {
+// Runs ffprobe and resolves with its stdout, rejecting with stderr on a non-zero exit.
+function runFfprobe(args) {
   return new Promise((resolve, reject) => {
-    const args = ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', inputPath];
     const proc = spawn(FFPROBE_PATH, args);
 
     let stdout = '';
@@ -36,14 +36,33 @@ export function probeDuration(inputPath) {
     });
 
     proc.on('close', (code) => {
-      const duration = parseFloat(stdout);
-      if (code === 0 && Number.isFinite(duration)) {
-        resolve(duration);
+      if (code === 0) {
+        resolve(stdout);
       } else {
-        reject(new Error(`ffprobe could not read video duration (code ${code}): ${stderr.slice(-2000)}`));
+        reject(new Error(`ffprobe exited with code ${code}: ${stderr.slice(-2000)}`));
       }
     });
   });
+}
+
+// Returns the source video's duration in seconds, via ffprobe.
+export async function probeDuration(inputPath) {
+  const stdout = await runFfprobe(['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', inputPath]);
+  const duration = parseFloat(stdout);
+  if (!Number.isFinite(duration)) {
+    throw new Error(`ffprobe could not read video duration: ${stdout.slice(-2000)}`);
+  }
+  return duration;
+}
+
+// Returns { width, height } of the first video stream, via ffprobe.
+export async function probeDimensions(inputPath) {
+  const stdout = await runFfprobe(['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', inputPath]);
+  const [width, height] = stdout.trim().split('x').map(Number);
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    throw new Error(`ffprobe could not read video dimensions: ${stdout.slice(-2000)}`);
+  }
+  return { width, height };
 }
 
 // Throws if the video is longer than the supported maximum.
@@ -53,10 +72,10 @@ export function assertSupportedDuration(duration) {
   }
 }
 
-// Picks one random timestamp per 10s window. A 60s video gives 6 timestamps; a shorter
-// video gives one per window it reaches (e.g. 25s -> 3), with the last window cut short.
+// Picks one random timestamp per 10s window across the whole video, e.g. 120s -> 12,
+// 60s -> 6, 25s -> 3 (the last window is cut short).
 export function pickFrameTimestamps(duration) {
-  const lastUsable = Math.min(duration, MAX_VIDEO_DURATION_SECONDS) - END_MARGIN_SECONDS;
+  const lastUsable = duration - END_MARGIN_SECONDS;
   const timestamps = [];
 
   for (let start = 0; start < lastUsable; start += SEGMENT_SECONDS) {

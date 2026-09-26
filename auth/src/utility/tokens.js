@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { log } from './logger.js';
 
 export function generateAccessToken(user) {
   const token = jwt.sign(
@@ -6,7 +7,7 @@ export function generateAccessToken(user) {
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || '15m' }
   );
-  console.log('Access token created', new Date().toLocaleTimeString());
+  log('Access token created');
   return token;
 }
 
@@ -16,7 +17,7 @@ export function generateRefreshToken(user) {
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || '7d' }
   );
-  console.log('Refresh token created', new Date().toLocaleTimeString());
+  log('Refresh token created');
   return token;
 }
 

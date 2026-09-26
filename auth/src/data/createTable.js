@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import db from "../config/configDB.js";
+import { log } from "../utility/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,9 +20,9 @@ export default async function initDb() {
     const sqlFile = path.join(__dirname, "../data/userTable.sql");
     const createTableSQL = fs.readFileSync(sqlFile, "utf8");
     await db.query(createTableSQL);
-    console.log("Users table created");
+    log("Users table created");
   } else {
-    console.log("Users table already exists");
+    log("Users table already exists");
   }
 
   const refreshTableExists = await db.query(`
@@ -36,8 +37,8 @@ export default async function initDb() {
     const sqlFile = path.join(__dirname, "../data/refreshTokenTable.sql");
     const createTableSQL = fs.readFileSync(sqlFile, "utf8");
     await db.query(createTableSQL);
-    console.log("Refresh tokens table created");
+    log("Refresh tokens table created");
   } else {
-    console.log("Refresh tokens table already exists");
+    log("Refresh tokens table already exists");
   }
 }

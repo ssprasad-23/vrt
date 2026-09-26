@@ -1,11 +1,11 @@
 import pool from '../config/configDB.js'
 
-export const createTranscodeJob = async (videoId, sourceUrl, settings) => {
+export const createTranscodeJob = async (videoId, sourceKey, settings) => {
     const result = await pool.query(
-      `INSERT INTO transcode_jobs (video_id, source_url, settings, status)
+      `INSERT INTO transcode_jobs (video_id, source_key, settings, status)
        VALUES ($1, $2, $3, 'pending')
        RETURNING *`,
-      [videoId, sourceUrl, settings])
+      [videoId, sourceKey, settings])
     return result.rows[0]
 }
 

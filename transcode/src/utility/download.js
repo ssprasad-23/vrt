@@ -1,13 +1,11 @@
 import fs from 'fs';
 import { pipeline } from 'stream/promises';
-import { Readable } from 'stream';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client } from '../config/s3Config.js';
 
-// Downloads a video from a URL (e.g. a presigned S3 GET URL) to a local file so ffmpeg can read it.
-export async function downloadToFile(url, destPath) {
-  const response = await fetch(url);
-  if (!response.ok || !response.body) {
-    throw new Error(`Failed to download source video: ${response.status} ${response.statusText}`);
-  }
-
-  await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(destPath));
+// Downloads an object from S3 (the original upload) to a local file so ffmpeg can read it.
+// Uses this service's own credentials, so unlike a presigned URL it never expires on retries.
+export async function downloadFromS3(bucket, key, destPath) {
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  await pipeline(response.Body, fs.createWriteStream(destPath));
 }

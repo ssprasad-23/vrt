@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import db from "./src/config/configDB.js";
 import initDb from "./src/data/createTable.js";
 import videoRouter from "./src/routes/videoRouters.js";
+import { log, logError } from "./src/utility/logger.js";
 
 dotenv.config();
 
@@ -14,7 +15,7 @@ app.use("/", videoRouter);
 
 // centralized error handler (catches next(err) calls from the controller)
 app.use((err, req, res, next) => {
-  console.error(err);
+  logError(err);
   res.status(500).json({ status: 500, message: "Something went wrongg", data: null });
 });
 
@@ -23,17 +24,17 @@ app.use((err, req, res, next) => {
   try {
     // Verify DB connectivity
     await db.query("SELECT 1");
-    console.log("Video database connected successfully");
+    log("Video database connected successfully");
 
     // Create tables if needed
     await initDb();
 
     // Start server AFTER DB is ready
     app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
+      log(`Server running at http://localhost:${PORT}`);
     });
   } catch (err) {
-    console.error("Startup failed:", err);
+    logError("Startup failed:", err);
     process.exit(1);
   }
 })();
