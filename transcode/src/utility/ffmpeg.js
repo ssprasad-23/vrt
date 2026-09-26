@@ -38,10 +38,14 @@ export function buildAv1Args(inputPath, outputPath, settings) {
   return args;
 }
 
-// Runs ffmpeg and resolves once the encode finishes, rejecting with stderr output on failure.
+// Runs the AV1 encode and resolves once it finishes, rejecting with stderr output on failure.
 export function runFfmpeg(inputPath, outputPath, settings) {
+  return spawnFfmpeg(buildAv1Args(inputPath, outputPath, settings));
+}
+
+// Runs ffmpeg with an arbitrary arg list (shared by the encode and frame extraction).
+export function spawnFfmpeg(args) {
   return new Promise((resolve, reject) => {
-    const args = buildAv1Args(inputPath, outputPath, settings);
     const proc = spawn(FFMPEG_PATH, args);
 
     let stderr = '';

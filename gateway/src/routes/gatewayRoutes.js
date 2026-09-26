@@ -17,24 +17,17 @@ router.use("/auth", createProxyMiddleware({
     changeOrigin: true,
 }))
 
-// videos/* and transcode/* require a valid access token. authenticate() verifies
-// it once here; attachProxyHeaders forwards the decoded identity + a shared
-// secret so the downstream service can trust it instead of re-verifying the JWT.
+// videos/* requires a valid access token. authenticate() verifies it once here;
+// attachProxyHeaders forwards the decoded identity + a shared secret so the
+// downstream service can trust it instead of re-verifying the JWT.
 //
 // Express's router.use(mountPath, ...) strips the mount path from req.url before
-// the proxy ever sees it, but upload/transcode's own routers expect the full path
+// the proxy ever sees it, but upload's own router expects the full path
 // (e.g. /videos/upload-init, not just /upload-init) — pathRewrite adds it back.
 router.use("/videos", authenticate, createProxyMiddleware({
     target: SERVICE_TARGETS.upload,
     changeOrigin: true,
     pathRewrite: (path) => `/videos${path}`,
-    on: { proxyReq: attachProxyHeaders },
-}))
-
-router.use("/transcode", authenticate, createProxyMiddleware({
-    target: SERVICE_TARGETS.transcode,
-    changeOrigin: true,
-    pathRewrite: (path) => `/transcode${path}`,
     on: { proxyReq: attachProxyHeaders },
 }))
 

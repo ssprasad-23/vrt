@@ -8,9 +8,20 @@ import {
     markTranscodeCompleted,
     markTranscodeFailed,
 } from "../models/transcodeModels.js"
-import { buildAv1EncodedKey, uploadFileToS3 } from '../utility/s3.js';
+import {
+    MEDIA_BUCKET,
+    buildAv1EncodedKey,
+    buildFrameKey,
+    uploadFileToS3,
+} from '../utility/s3.js';
 import { downloadToFile } from '../utility/download.js';
 import { runFfmpeg } from '../utility/ffmpeg.js';
+import {
+    probeDuration,
+    assertSupportedDuration,
+    pickFrameTimestamps,
+    extractFrames,
+} from '../utility/frameExtraction.js';
 import { DEFAULT_ENCODING_SETTINGS } from '../config/encodingConfig.js';
 
 const CONTAINER_CONTENT_TYPES = {
@@ -22,7 +33,7 @@ const CONTAINER_CONTENT_TYPES = {
 const TMP_ROOT = process.env.TRANSCODE_TMP_DIR || os.tmpdir();
 
 // Creates the transcode_jobs row for a video if one doesn't already exist yet.
-// Shared by the HTTP route and the BullMQ worker, since either can be the first
+// Shared by the HTTP route and the SQS worker, since either can be the first
 // to see a given videoId.
 export async function ensureTranscodeJob(videoId, sourceUrl) {
     const existing = await findTranscodeJobById(videoId)
@@ -33,8 +44,10 @@ export async function ensureTranscodeJob(videoId, sourceUrl) {
     return { job, created: true }
 }
 
-// Downloads the source video, runs the AV1 encode, uploads the result to
-// MinIO/S3 under av1-encoded/, and updates the job row at each stage.
+// Downloads the source video, extracts one random frame per 10s window (uploaded to
+// the media bucket as {videoId}/frames/frame_N.jpg), runs the AV1 encode, uploads the
+// result to the media bucket as {videoId}/av1.{container}, and updates the job row at each stage.
+// Any step failing (including a video over 60s) fails the whole job.
 // Assumes a transcode_jobs row already exists for videoId (see ensureTranscodeJob).
 export async function runTranscodeJob(videoId) {
     const job = await findTranscodeJobById(videoId)
@@ -53,11 +66,20 @@ export async function runTranscodeJob(videoId) {
         await markTranscodeProcessing(videoId);
 
         await downloadToFile(sourceUrl, inputPath);
+
+        // Frames first: it's cheap and rejects over-length videos before the slow encode.
+        const duration = await probeDuration(inputPath);
+        assertSupportedDuration(duration);
+        const frames = await extractFrames(inputPath, jobDir, pickFrameTimestamps(duration));
+        for (const frame of frames) {
+            await uploadFileToS3(MEDIA_BUCKET, buildFrameKey(videoId, frame.index), frame.path, 'image/jpeg');
+        }
+
         await runFfmpeg(inputPath, outputPath, settings);
 
         const outputKey = buildAv1EncodedKey(videoId, settings.container);
         const contentType = CONTAINER_CONTENT_TYPES[settings.container] || 'application/octet-stream';
-        await uploadFileToS3(outputKey, outputPath, contentType);
+        await uploadFileToS3(MEDIA_BUCKET, outputKey, outputPath, contentType);
 
         return await markTranscodeCompleted(videoId, outputKey);
     } catch (err) {

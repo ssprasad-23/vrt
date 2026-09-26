@@ -6,7 +6,7 @@ export function generateAccessToken(user) {
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || '15m' }
   );
-  console.log('access token created', new Date().toLocaleTimeString());
+  console.log('Access token created', new Date().toLocaleTimeString());
   return token;
 }
 
@@ -16,7 +16,7 @@ export function generateRefreshToken(user) {
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || '7d' }
   );
-  console.log('refresh token created', new Date().toLocaleTimeString());
+  console.log('Refresh token created', new Date().toLocaleTimeString());
   return token;
 }
 

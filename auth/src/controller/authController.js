@@ -99,7 +99,7 @@ export const logoutController = async (req, res, next) => {
     try {
         if (token) {
             await deleteRefreshToken(token)
-            console.log("refresh token deleted", new Date().toLocaleTimeString())
+            console.log("Refresh token deleted", new Date().toLocaleTimeString())
         }
         res.clearCookie('refreshToken', {
             httpOnly: true,

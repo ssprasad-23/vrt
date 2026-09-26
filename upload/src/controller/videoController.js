@@ -29,7 +29,7 @@ export const initUpload = async (req, res, next) => {
         const filename = `${videoId}.mp4`
 
         //build s3 object key
-        const s3Key = buildVideoKey(userId, videoId, filename)
+        const s3Key = buildVideoKey(videoId)
 
         //insert a pending video in postgres
         const video = await createVideoService(videoId, userId, s3Key, filename, contentType, description, category)

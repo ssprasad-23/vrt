@@ -1,41 +1,83 @@
-import { Worker } from 'bullmq';
-import { redisConnection } from './redisConnection.js';
+import { Consumer } from 'sqs-consumer';
+import { sqsClient, TRANSCODE_QUEUE_URL } from '../config/sqsConfig.js';
 import { ensureTranscodeJob, runTranscodeJob } from '../services/transcodeService.js';
 
-const QUEUE_NAME = process.env.TRANSCODE_QUEUE_NAME || 'av1-transcode';
-const CONCURRENCY = Number(process.env.TRANSCODE_CONCURRENCY) || 1; // ffmpeg is CPU-heavy — keep this low
+// Lease held on an in-flight message. ffmpeg encodes can run for minutes, so the
+// consumer extends it every SQS_HEARTBEAT_INTERVAL seconds (ChangeMessageVisibility)
+// until the handler resolves. heartbeatInterval must be < visibilityTimeout.
+const VISIBILITY_TIMEOUT = Number(process.env.SQS_VISIBILITY_TIMEOUT) || 300;
+const HEARTBEAT_INTERVAL = Number(process.env.SQS_HEARTBEAT_INTERVAL) || 60;
 
-// Consumes jobs shaped { videoId, url }. Encoding settings are global —
-// see src/config/encodingConfig.js — not configurable per job.
-async function processQueueJob(bullJob) {
-  const { videoId, url } = bullJob.data;
+// Consumes messages whose body is JSON: { videoId, url }. Encoding settings are
+// global (src/config/encodingConfig.js), not configurable per message.
+//
+// Resolving deletes the message (ack). Throwing leaves it on the queue — SQS makes
+// it visible again after the visibility timeout and redelivers it, up to the queue's
+// maxReceiveCount before it goes to the dead-letter queue (both configured on the
+// queue itself, not here).
+async function processMessage(message) {
+  let payload;
+  try {
+    payload = JSON.parse(message.Body);
+  } catch {
+    throw new Error(`Bad transcode message (MessageId=${message.MessageId}): body is not valid JSON`);
+  }
 
+  const { videoId, url } = payload;
   if (!videoId || !url) {
-    throw new Error(`Bad transcode job payload (bullJob.id=${bullJob.id}): videoId and url are required`);
+    throw new Error(`Bad transcode message (MessageId=${message.MessageId}): videoId and url are required`);
   }
 
   const { job, created } = await ensureTranscodeJob(videoId, url);
   if (!created && job.status === 'completed') {
-    return job; // already done — don't redo the encode
+    return; // already encoded on a previous delivery — ack so it isn't redelivered
   }
 
-  return runTranscodeJob(videoId);
+  await runTranscodeJob(videoId);
 }
 
 export function startTranscodeWorker() {
-  const worker = new Worker(QUEUE_NAME, processQueueJob, {
-    connection: redisConnection,
-    concurrency: CONCURRENCY,
+  if (!TRANSCODE_QUEUE_URL) {
+    throw new Error('TRANSCODE_QUEUE_URL not set — the SQS worker is the only way this service receives jobs');
+  }
+
+  const consumer = Consumer.create({
+    queueUrl: TRANSCODE_QUEUE_URL,
+    sqs: sqsClient,
+    handleMessage: processMessage,
+    batchSize: 1, // ffmpeg is CPU-bound — process one video at a time
+    waitTimeSeconds: 20, // long polling
+    visibilityTimeout: VISIBILITY_TIMEOUT,
+    heartbeatInterval: HEARTBEAT_INTERVAL,
   });
 
-  worker.on('completed', (bullJob) => {
-    console.log(`Transcode job completed: videoId=${bullJob.data.videoId}`);
+  consumer.on('message_received', (message) => {
+    const { videoId } = safeParse(message.Body);
+    console.log(`Transcode message received: videoId=${videoId}`);
   });
 
-  worker.on('failed', (bullJob, err) => {
-    console.error(`Transcode job failed: videoId=${bullJob?.data?.videoId}`, err);
+  consumer.on('message_processed', (message) => {
+    const { videoId } = safeParse(message.Body);
+    console.log(`Transcode message processed: videoId=${videoId}`);
   });
 
-  console.log(`Transcode worker listening on queue "${QUEUE_NAME}" (concurrency=${CONCURRENCY})`);
-  return worker;
+  consumer.on('processing_error', (err) => {
+    console.error('Transcode message processing error:', err.message);
+  });
+
+  consumer.on('error', (err) => {
+    console.error('SQS consumer error:', err.message);
+  });
+
+  consumer.start();
+  console.log(`Transcode worker polling SQS queue ${TRANSCODE_QUEUE_URL}`);
+  return consumer;
+}
+
+function safeParse(body) {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return {};
+  }
 }

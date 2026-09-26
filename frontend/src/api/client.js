@@ -29,7 +29,7 @@ const refreshAccessToken = () => {
       .then(res => {
         const newToken = res.data.data.accessToken;
         setAccessTokenExternal(newToken);
-        console.log('access token refreshed');
+        console.log('Access token refreshed');
         return newToken;
       })
       .catch(err => {
