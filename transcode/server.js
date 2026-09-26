@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import db from "./src/config/configDB.js";
 import initDb from "./src/data/createTable.js";
 import { startTranscodeWorker } from "./src/worker/transcodeWorker.js";
+import { log, logError } from "./src/utility/logger.js";
 
 dotenv.config();
 
@@ -10,15 +11,15 @@ dotenv.config();
   try {
     // Verify DB connectivity
     await db.query("SELECT 1");
-    console.log("Transcode database connected successfully");
+    log("Transcode database connected successfully");
 
     // Create tables if needed
     await initDb();
 
-    // Start the SQS worker (polls { videoId, url } messages off the transcode queue) AFTER DB is ready
+    // Start the SQS worker (polls { videoId, key } messages off the transcode queue) AFTER DB is ready
     startTranscodeWorker();
   } catch (err) {
-    console.error("Startup failed:", err);
+    logError("Startup failed:", err);
     process.exit(1);
   }
 })();

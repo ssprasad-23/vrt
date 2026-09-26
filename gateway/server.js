@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import gatewayRouter from "./src/routes/gatewayRoutes.js";
+import { log, logError } from "./src/utility/logger.js";
 
 dotenv.config();
 
@@ -14,10 +15,10 @@ app.use("/", gatewayRouter);
 
 // centralized error handler (catches next(err) calls, matching the other services)
 app.use((err, req, res, next) => {
-  console.error(err);
+  logError(err);
   res.status(500).json({ status: 500, message: "Something went wrong", data: null });
 });
 
 app.listen(PORT, () => {
-  console.log(`API gateway running at http://localhost:${PORT}`);
+  log(`API gateway running at http://localhost:${PORT}`);
 });

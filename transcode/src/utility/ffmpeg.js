@@ -25,7 +25,7 @@ export function buildAv1Args(inputPath, outputPath, settings) {
   }
 
   if (settings.frameRate) {
-    args.push('-r', String(settings.frameRate));
+    args.push('-fpsmax', String(settings.frameRate)); // cap only; never adds frames to slower sources
   }
 
   args.push(

@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS transcode_jobs (
     video_id VARCHAR(12) PRIMARY KEY,
-    source_url TEXT NOT NULL,
+    source_key TEXT NOT NULL,
     output_key VARCHAR(1024),
     settings JSONB NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',

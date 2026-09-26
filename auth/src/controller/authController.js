@@ -8,6 +8,7 @@ import {
 import { generateAccessToken,
          generateRefreshToken,
          verifyRefreshToken } from '../utility/tokens.js';
+import { log } from "../utility/logger.js"
 
 
 //Standardise response function
@@ -25,7 +26,7 @@ export const createUser = async (req, res, next) => {
     try {
         const signUp = await createUserService(username, email, password, dob, phone_number, country)
         handleResponse(res, 201, "User created successfully", signUp)
-        console.log("User created successfully", new Date().toLocaleTimeString())
+        log("User created successfully")
     } catch (err) {
         if (err.code === '23505') {  // PostgreSQL unique violation code
             return handleResponse(res, 409, "Error Creating User")
@@ -99,7 +100,7 @@ export const logoutController = async (req, res, next) => {
     try {
         if (token) {
             await deleteRefreshToken(token)
-            console.log("Refresh token deleted", new Date().toLocaleTimeString())
+            log("Refresh token deleted")
         }
         res.clearCookie('refreshToken', {
             httpOnly: true,
@@ -107,7 +108,7 @@ export const logoutController = async (req, res, next) => {
             sameSite: 'strict',
         })
         handleResponse(res, 200, "Logged out successfully")
-        console.log("Logged out successfully", )
+        log("Logged out successfully")
     } catch (err) {
         next(err)
     }
