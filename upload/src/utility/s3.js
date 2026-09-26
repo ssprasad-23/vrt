@@ -16,13 +16,11 @@ const UPLOAD_URL_EXPIRY_SECONDS = Number(process.env.UPLOAD_URL_EXPIRY_SECONDS) 
 // access token uses { userId: user.user_id, email: user.email }
 
 
-//working
-//Builds a unique, safe S3 object key (file path) for a user's video upload.
-//originals>userid>uuid + filename
-export function buildVideoKey(userId, videoId, filename) {
-  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-  console.log("safename created")
-  return `original/${userId}/${videoId}-${safeName}`;
+//Builds the S3 object key for a video's original upload, one folder per video
+//(same layout as the media bucket's {videoId}/av1.mp4): original bucket > {videoId}/{videoId}_original.mp4.
+//videoId repeated in the filename so the file stays identifiable if copied out of its folder.
+export function buildVideoKey(videoId) {
+  return `${videoId}/${videoId}_original.mp4`;
 }
 
 //working
