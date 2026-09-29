@@ -15,3 +15,7 @@ export const sqsClient = new SQSClient({
 // Full queue URL, e.g. https://sqs.us-east-1.amazonaws.com/123456789012/av1-transcode
 // The worker doesn't start without it.
 export const TRANSCODE_QUEUE_URL = process.env.TRANSCODE_QUEUE_URL;
+
+// Full URL of the queue this service reports finished encodes to, as { videoId, codec, outputKey }
+// (one message per output). The upload service listens on it and saves outputKey on its videos row.
+export const TRANSCODE_COMPLETED_QUEUE_URL = process.env.TRANSCODE_COMPLETED_QUEUE_URL;

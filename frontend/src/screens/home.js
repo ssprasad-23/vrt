@@ -1,15 +1,72 @@
-import React, {useState} from "react";
-import {View, FlatList, Dimensions, StatusBar, TouchableOpacity, Text, StyleSheet, Modal, Pressable} from "react-native";
+import React, {useCallback, useEffect, useRef, useState} from "react";
+import {View, FlatList, Dimensions, StatusBar, TouchableOpacity, Text, StyleSheet, Modal, Pressable, ActivityIndicator, RefreshControl} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useIsFocused } from "@react-navigation/native";
 import Post from "../components/Post";
-import posts from "../data/sampledata";
 import apiClient from "../api/client";
+import {fetchFeed, toPost} from "../api/feed";
 import {useAuth} from "../context/AuthContext";
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+// a video counts as "on screen" (and plays) once most of it is visible
+const VIEWABILITY_CONFIG = {itemVisiblePercentThreshold: 80};
 
 const Home = ({navigation}) => {
   const insets = useSafeAreaInsets();
   const [menuVisible, setMenuVisible] = useState(false);
   const {setAccessToken} = useAuth();
+  // pause the feed while another screen (e.g. the Upload modal) is on top
+  const isFocused = useIsFocused();
+
+  const [posts, setPosts] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  // onEndReached can fire several times in a row — a ref blocks overlapping page loads synchronously
+  const loadingRef = useRef(false);
+
+  // Loads one page. With reset, starts over from the newest video (initial load / pull-to-refresh);
+  // otherwise appends the page after nextCursor.
+  const loadPage = useCallback(async ({reset = false} = {}) => {
+    if (loadingRef.current) return;
+    if (!reset && !hasMore) return;
+    loadingRef.current = true;
+    reset ? setRefreshing(true) : setLoadingMore(true);
+    try {
+      const {videos, nextCursor: cursor} = await fetchFeed(reset ? null : nextCursor);
+      const page = videos.map(toPost);
+      setPosts(prev => (reset ? page : [...prev, ...page]));
+      setNextCursor(cursor);
+      setHasMore(cursor !== null);
+      setError(null);
+      if (reset) setActiveIndex(0);
+    } catch (err) {
+      console.error('Feed load failed', err);
+      setError(err?.message || 'Could not load the feed');
+    } finally {
+      loadingRef.current = false;
+      setRefreshing(false);
+      setLoadingMore(false);
+      setInitialLoading(false);
+    }
+  }, [hasMore, nextCursor]);
+
+  useEffect(() => {
+    loadPage({reset: true});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // must be a stable reference — FlatList doesn't allow changing it on the fly
+  const onViewableItemsChanged = useRef(({viewableItems}) => {
+    if (viewableItems.length > 0 && viewableItems[0].index != null) {
+      setActiveIndex(viewableItems[0].index);
+    }
+  }).current;
 
   const handleLogout = async () => {
     setMenuVisible(false);
@@ -34,15 +91,51 @@ const Home = ({navigation}) => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      <FlatList
-        data={posts}
-        keyExtractor={item => item.id}
-        renderItem={({item}) => <Post post={item} />}
-        snapToInterval={Dimensions.get('window').height}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-      />
+      {initialLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color="#fff" size="large" />
+        </View>
+      ) : (
+        <FlatList
+          data={posts}
+          keyExtractor={item => item.id}
+          renderItem={({item, index}) => (
+            <Post post={item} isActive={isFocused && index === activeIndex} />
+          )}
+          getItemLayout={(_, index) => ({length: SCREEN_HEIGHT, offset: SCREEN_HEIGHT * index, index})}
+          snapToInterval={SCREEN_HEIGHT}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          showsVerticalScrollIndicator={false}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={VIEWABILITY_CONFIG}
+          // fetch the next page while the user is still ~1 video away from the end
+          onEndReached={() => loadPage()}
+          onEndReachedThreshold={1}
+          // keep only a few full-screen videos mounted at a time
+          windowSize={3}
+          initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadPage({reset: true})} tintColor="#fff" />
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color="#fff" />
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            <View style={[styles.centered, {height: SCREEN_HEIGHT}]}>
+              <Text style={styles.emptyText}>{error ? 'Could not load the feed' : 'No videos yet'}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={() => loadPage({reset: true})} activeOpacity={0.8}>
+                <Text style={styles.retryText}>{error ? 'Retry' : 'Refresh'}</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      )}
 
       <TouchableOpacity
         style={[styles.menuButton, {top: insets.top - 3}]}
@@ -76,6 +169,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
   menuButton: {
     position: 'absolute',

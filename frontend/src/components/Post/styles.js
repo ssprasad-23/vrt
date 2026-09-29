@@ -75,6 +75,16 @@ const styles = StyleSheet.create({
         borderWidth: 0.5,
         borderColor: "rgba(255,255,255,0.3)",
     },
+    profilePlaceholder: {
+        backgroundColor: "rgba(255,255,255,0.15)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    profileInitial: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 16,
+    },
 
 });
 

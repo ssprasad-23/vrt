@@ -3,7 +3,7 @@ import { HeadObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { s3Client } from '../config/s3Config.js';
 
-// Everything this service produces (AV1 output + frames) goes in one public-facing
+// Everything this service produces (H.264 + AV1 outputs, frames) goes in one public-facing
 // "media" bucket, laid out as {videoId}/<file>. The upload service's source files
 // live in a separate, private "original" bucket.
 export const MEDIA_BUCKET = process.env.S3_MEDIA_BUCKET_NAME || 'media';
@@ -13,12 +13,13 @@ export const ORIGINAL_BUCKET = process.env.S3_BUCKET_NAME;
 
 // Short codec label used in output filenames, keyed by ffmpeg encoder name.
 const CODEC_LABELS = {
+  libx264: 'H264',
   libsvtav1: 'AV1',
   'libaom-av1': 'AV1',
 };
 
 // Object key for a video's encoded output within MEDIA_BUCKET, e.g.
-// {videoId}/{videoId}_AV1_1080_2.0MB.mp4
+// {videoId}/{videoId}_H264_1080_5.1MB.mp4 or {videoId}/{videoId}_AV1_1080_2.0MB.mp4
 // Quality is the shorter side, so portrait 1080x1920 is also 1080.
 export function buildEncodedKey(videoId, { videoCodec, width, height, sizeBytes, container }) {
   const codec = CODEC_LABELS[videoCodec] || videoCodec;

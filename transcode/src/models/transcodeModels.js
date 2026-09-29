@@ -27,13 +27,27 @@ export const markTranscodeProcessing = async (videoId) => {
     return result.rows[0]
 }
 
-export const markTranscodeCompleted = async (videoId, outputKey) => {
+// Records one finished encode (e.g. name 'h264') in the job's outputs map, merged with any
+// already there — so a retry after a partial failure knows which outputs to skip.
+export const saveTranscodeOutput = async (videoId, name, outputKey) => {
     const result = await pool.query(
         `UPDATE transcode_jobs
-         SET status = 'completed', output_key = $2, completed_at = now()
+         SET outputs = outputs || jsonb_build_object($2::text, $3::text)
          WHERE video_id = $1
          RETURNING *`,
-        [videoId, outputKey]
+        [videoId, name, outputKey]
+    )
+    return result.rows[0]
+}
+
+// Marks the job done once every output is saved (see saveTranscodeOutput).
+export const markTranscodeCompleted = async (videoId) => {
+    const result = await pool.query(
+        `UPDATE transcode_jobs
+         SET status = 'completed', error_message = NULL, completed_at = now()
+         WHERE video_id = $1
+         RETURNING *`,
+        [videoId]
     )
     return result.rows[0]
 }

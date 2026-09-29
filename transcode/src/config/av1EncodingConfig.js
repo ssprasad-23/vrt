@@ -1,6 +1,8 @@
 // AV1 encoding settings applied to every transcode job, global — change values here
 // to change how ALL jobs (past config aside) are encoded going forward.
-export const DEFAULT_ENCODING_SETTINGS = { 
+// Smaller than H.264 but needs a hardware AV1 decoder (iPhone 15 Pro+); encoded after H.264.
+export const AV1_SETTINGS = { 
+  name: 'av1', 
   videoCodec: 'libsvtav1', 
   crf: 33, 
   bitrate: null, 
@@ -13,6 +15,7 @@ export const DEFAULT_ENCODING_SETTINGS = {
   audioBitrate: '128k', 
   container: 'mp4' };
   
+// name: key for this output in transcode_jobs.outputs and the `codec` in completion messages — keep it 'av1'
 // videoCodec: libsvtav1 (fast, recommended) or libaom-av1 (reference encoder, much slower)
 // crf: 0-63, LOWER = higher quality/BIGGER file. 35 cut uploads by ~20-45% at VMAF ~92-94;
 //   25-30 came out the same size as, or bigger than, the upload. Ignored if bitrate is set (bitrate forces a rate-controlled encode instead of constant quality).

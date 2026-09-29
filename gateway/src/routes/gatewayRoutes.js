@@ -31,4 +31,14 @@ router.use("/videos", authenticate, createProxyMiddleware({
     on: { proxyReq: attachProxyHeaders },
 }))
 
+// feed/* — same auth + header forwarding as /videos. feed's router also expects the
+// full prefixed path (GET /feed), so pathRewrite adds back the stripped /feed.
+// req.url keeps the query string, so "/?limit=3&cursor=..." becomes "/feed/?limit=3&cursor=...".
+router.use("/feed", authenticate, createProxyMiddleware({
+    target: SERVICE_TARGETS.feed,
+    changeOrigin: true,
+    pathRewrite: (path) => `/feed${path}`,
+    on: { proxyReq: attachProxyHeaders },
+}))
+
 export default router

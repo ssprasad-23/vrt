@@ -18,6 +18,7 @@ Express 5 reverse proxy using ES modules (`"type": "module"`). This is the singl
 **Request flow**: `server.js` → `src/routes/gatewayRoutes.js`, which mounts two proxies:
 - `/auth/*` → `auth` service, unauthenticated (see below), via `http-proxy-middleware`.
 - `/videos/*` → `upload` service, behind `src/middleware/authenticate.js`.
+- `/feed/*` → `feed` service (`GET /feed`, paginated video feed), behind the same `authenticate` + `attachProxyHeaders`, with the same `pathRewrite` as `/videos` (feed's router expects the full `/feed` path).
 
 **No body parsing** (`server.js`): deliberately no `express.json()`. This is a pure passthrough proxy — the request body is streamed straight to the upstream service untouched. Parsing it here would consume the stream and break proxying of POST/PUT bodies (there's no need to read the body at the gateway; identity comes from the `Authorization` header).
 
@@ -27,7 +28,7 @@ Express 5 reverse proxy using ES modules (`"type": "module"`). This is the singl
 
 **Path handling — a real gotcha, worth understanding before touching this file**: Express's `router.use(mountPath, middleware)` strips `mountPath` off `req.url` *before* the proxy middleware ever sees it. For `/auth/*`, that's exactly what we want — `auth`'s own router isn't prefixed with `/auth` (its routes are just `/userSignUp` etc. mounted at `/`), so the stripped path already matches. For `/videos/*`, it's the opposite problem: `upload`'s own router *does* expect the full prefixed path (`/videos/upload-init`), so that proxy has an explicit `pathRewrite: (path) => \`/videos${path}\`` to add the stripped prefix back. Getting this wrong silently 404s against the real service while a naive fake-upstream test (one that responds 200 regardless of path) won't catch it — that's exactly what happened during initial testing here.
 
-**Service targets** (`src/config/services.js`): `AUTH_SERVICE_URL`, `UPLOAD_SERVICE_URL`, `TRANSCODE_SERVICE_URL` env vars, defaulting to `localhost:3000`/`3001`/`3002`.
+**Service targets** (`src/config/services.js`): `AUTH_SERVICE_URL`, `UPLOAD_SERVICE_URL`, `FEED_SERVICE_URL` env vars, defaulting to `localhost:3000`/`3001`/`3003` (`TRANSCODE_SERVICE_URL` is in `.env` but unused — transcode has no HTTP routes proxied).
 
 ## Where things live
 

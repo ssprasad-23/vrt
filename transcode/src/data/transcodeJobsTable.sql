@@ -1,7 +1,10 @@
 CREATE TABLE IF NOT EXISTS transcode_jobs (
     video_id VARCHAR(12) PRIMARY KEY,
     source_key TEXT NOT NULL,
+    -- legacy single-output key (AV1-only jobs from before H.264 was added); new jobs use outputs
     output_key VARCHAR(1024),
+    -- finished encodes, by output name: { "h264": "<key>", "av1": "<key>" }
+    outputs JSONB NOT NULL DEFAULT '{}',
     settings JSONB NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     error_message TEXT,
