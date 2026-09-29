@@ -1,8 +1,10 @@
 import { Consumer } from 'sqs-consumer';
-import { sqsClient, TRANSCODE_QUEUE_URL } from '../config/sqsConfig.js';
-import { ensureTranscodeJob, runTranscodeJob } from '../services/transcodeService.js';
+import { sqsClient, TRANSCODE_QUEUE_URL, TRANSCODE_COMPLETED_QUEUE_URL } from '../config/sqsConfig.js';
+import { ensureTranscodeJob, runTranscodeJob, missingOutputs } from '../services/transcodeService.js';
+import { markTranscodeCompleted } from '../models/transcodeModels.js';
 import { log, logError } from '../utility/logger.js';
 import { ORIGINAL_BUCKET, getObjectSize } from '../utility/s3.js';
+import { sendTranscodeCompleted } from '../utility/sqs.js';
 
 // Lease held on an in-flight message. ffmpeg encodes can run for minutes, so the
 // consumer extends it every SQS_HEARTBEAT_INTERVAL seconds (ChangeMessageVisibility)
@@ -11,8 +13,8 @@ const VISIBILITY_TIMEOUT = Number(process.env.SQS_VISIBILITY_TIMEOUT) || 300;
 const HEARTBEAT_INTERVAL = Number(process.env.SQS_HEARTBEAT_INTERVAL) || 60;
 
 // Consumes messages whose body is JSON: { videoId, key } — key is the original's S3 object
-// key in the original bucket (sent by the upload service when an upload completes). Encoding settings are
-// global (src/config/encodingConfig.js), not configurable per message.
+// key in the original bucket (sent by the upload service when an upload completes). Which outputs
+// get encoded (H.264, AV1) and how is global (src/config/encodingOutputs.js), not configurable per message.
 //
 // Resolving deletes the message (ack). Throwing leaves it on the queue — SQS makes
 // it visible again after the visibility timeout and redelivers it, up to the queue's
@@ -34,15 +36,31 @@ async function processMessage(message) {
   const originalBytes = await getObjectSize(ORIGINAL_BUCKET, key);
   log(`Transcode message received: videoId=${videoId} (original ${originalBytes === null ? 'missing' : formatMb(originalBytes)})`);
 
-  const { job, created } = await ensureTranscodeJob(videoId, key);
-  if (!created && job.status === 'completed') {
-    log(`Transcode message skipped: videoId=${videoId} already completed`);
-    return; // already encoded on a previous delivery — ack so it isn't redelivered
+  const { job } = await ensureTranscodeJob(videoId, key);
+
+  // Resend a completion for every output already saved: a previous delivery may have encoded
+  // it but failed to send, and this is the only chance upload gets to learn the key.
+  // Duplicates are harmless (upload just sets the same key again).
+  for (const [codec, outputKey] of Object.entries(job.outputs || {})) {
+    await sendTranscodeCompleted(videoId, codec, outputKey);
+  }
+
+  if (missingOutputs(job).length === 0) {
+    // everything was encoded on a previous delivery (maybe it crashed before marking the job)
+    if (job.status !== 'completed') await markTranscodeCompleted(videoId);
+    log(`Transcode message skipped: videoId=${videoId} already has all outputs`);
+    return; // ack so it isn't redelivered
   }
 
   try {
-    const { sourceBytes, encodedBytes } = await runTranscodeJob(videoId);
-    log(`Transcode message processed: videoId=${videoId} (original ${formatMb(sourceBytes)} -> encoded ${formatMb(encodedBytes)})`);
+    // each output is reported the moment it's saved, so H.264 reaches the feed before AV1 finishes.
+    // If a send fails the handler throws, SQS redelivers, and the resend loop above covers it —
+    // outputs already saved are not re-encoded.
+    const { sourceBytes, encodedBytes } = await runTranscodeJob(videoId, (codec, outputKey) =>
+      sendTranscodeCompleted(videoId, codec, outputKey)
+    );
+    const summary = Object.entries(encodedBytes).map(([codec, bytes]) => `${codec} ${formatMb(bytes)}`).join(', ');
+    log(`Transcode message processed: videoId=${videoId} (original ${formatMb(sourceBytes)} -> ${summary})`);
   } catch (err) {
     // The original is gone from the bucket — retrying can't bring it back, so ack the
     // message instead of letting SQS redeliver it forever. runTranscodeJob has already
@@ -58,6 +76,9 @@ async function processMessage(message) {
 export function startTranscodeWorker() {
   if (!TRANSCODE_QUEUE_URL) {
     throw new Error('TRANSCODE_QUEUE_URL not set — the SQS worker is the only way this service receives jobs');
+  }
+  if (!TRANSCODE_COMPLETED_QUEUE_URL) {
+    throw new Error('TRANSCODE_COMPLETED_QUEUE_URL not set — nowhere to report finished encodes to the upload service');
   }
 
   const consumer = Consumer.create({

@@ -2,12 +2,15 @@ import { spawn } from 'child_process';
 
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 
-// Builds the ffmpeg CLI args for an AV1 encode from a merged settings object
-// (see src/config/encodingConfig.js for the available knobs).
-export function buildAv1Args(inputPath, outputPath, settings) {
+// Builds the ffmpeg CLI args for one encode output (H.264 or AV1) from its settings
+// object (see src/config/h264EncodingConfig.js / av1EncodingConfig.js for the knobs).
+export function buildEncodeArgs(inputPath, outputPath, settings) {
   const args = ['-y', '-i', inputPath, '-c:v', settings.videoCodec];
 
-  if (settings.videoCodec === 'libsvtav1') {
+  if (settings.videoCodec === 'libx264') {
+    args.push('-preset', String(settings.preset));
+    if (settings.profile) args.push('-profile:v', settings.profile);
+  } else if (settings.videoCodec === 'libsvtav1') {
     args.push('-preset', String(settings.preset));
   } else if (settings.videoCodec === 'libaom-av1') {
     args.push('-cpu-used', String(settings.cpuUsed), '-row-mt', '1');
@@ -15,7 +18,10 @@ export function buildAv1Args(inputPath, outputPath, settings) {
 
   if (settings.bitrate) {
     args.push('-b:v', settings.bitrate);
+  } else if (settings.videoCodec === 'libx264') {
+    args.push('-crf', String(settings.crf));
   } else {
+    // AV1 encoders need -b:v 0 alongside -crf to run in pure constant-quality mode
     args.push('-crf', String(settings.crf), '-b:v', '0');
   }
 
@@ -32,15 +38,20 @@ export function buildAv1Args(inputPath, outputPath, settings) {
     '-pix_fmt', settings.pixelFormat,
     '-c:a', settings.audioCodec,
     '-b:a', settings.audioBitrate,
-    outputPath
   );
 
+  // moves the mp4 index to the front so players can start before the whole file downloads
+  if (settings.container === 'mp4') {
+    args.push('-movflags', '+faststart');
+  }
+
+  args.push(outputPath);
   return args;
 }
 
-// Runs the AV1 encode and resolves once it finishes, rejecting with stderr output on failure.
+// Runs one encode and resolves once it finishes, rejecting with stderr output on failure.
 export function runFfmpeg(inputPath, outputPath, settings) {
-  return spawnFfmpeg(buildAv1Args(inputPath, outputPath, settings));
+  return spawnFfmpeg(buildEncodeArgs(inputPath, outputPath, settings));
 }
 
 // Runs ffmpeg with an arbitrary arg list (shared by the encode and frame extraction).

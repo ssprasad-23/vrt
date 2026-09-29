@@ -61,7 +61,7 @@ export const completeUpload = async (req, res, next) => {
         // the client uploads straight to S3, so confirm the file actually landed before queuing
         // the transcode job — otherwise the worker would pick up a job for a file that isn't there.
         // The row stays 'pending', so the client can finish the upload and retry /complete.
-        const uploadedSize = await getUploadedSize(video.s3_key)
+        const uploadedSize = await getUploadedSize(video.original_s3_key)
         if (!uploadedSize) {
             return handleResponse(res, 400, "Upload not found in storage — upload the file before completing")
         }
@@ -70,7 +70,7 @@ export const completeUpload = async (req, res, next) => {
         // 'pending', so the client can retry /complete instead of getting stuck on a 409.
         // A duplicate message (send ok, update fails, client retries) is harmless — the
         // transcode worker skips jobs that are already completed.
-        await sendTranscodeJob(video.video_id, video.s3_key)
+        await sendTranscodeJob(video.video_id, video.original_s3_key)
 
         const updated = await markVideoUploaded(id)
         handleResponse(res, 200, "Upload marked complete", updated)
