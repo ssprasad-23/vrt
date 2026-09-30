@@ -16,34 +16,35 @@ export const findVideoById = async (videoId) => {
     return result.rows[0]
 }
 
-export const markVideoUploaded = async (videoId) => {
+export const markVideoUploaded = async (videoId, originalSizeMb) => {
     const result = await pool.query(
         `UPDATE videos
-         SET status = 'uploaded', uploaded_at = now()
+         SET status = 'uploaded', uploaded_at = now(), original_size_mb = $2
          WHERE video_id = $1
          RETURNING *`,
-        [videoId]
+        [videoId, originalSizeMb]
     )
     return result.rows[0]
 }
 
-// Column each transcode output's key is saved in. A whitelist, so the codec from an SQS
-// message never ends up in the SQL itself.
+// Columns each transcode output's key and size (MB) are saved in. A whitelist, so the codec from
+// an SQS message never ends up in the SQL itself.
 export const ENCODED_KEY_COLUMNS = {
-    h264: 'h264_s3_key',
-    av1: 'av1_s3_key',
+    h264: { key: 'h264_s3_key', sizeMb: 'h264_size_mb' },
+    av1: { key: 'av1_s3_key', sizeMb: 'av1_size_mb' },
 }
 
-// Saves one encoded file's key (media bucket) once the transcode service reports that output done.
-export const setEncodedKey = async (videoId, codec, key) => {
-    const column = ENCODED_KEY_COLUMNS[codec]
-    if (!column) throw new Error(`Unknown codec: ${codec}`)
+// Saves one encoded file's key (media bucket) and size in MB once the transcode service reports
+// that output done.
+export const setEncodedKey = async (videoId, codec, key, sizeMb) => {
+    const columns = ENCODED_KEY_COLUMNS[codec]
+    if (!columns) throw new Error(`Unknown codec: ${codec}`)
     const result = await pool.query(
         `UPDATE videos
-         SET ${column} = $2
+         SET ${columns.key} = $2, ${columns.sizeMb} = $3
          WHERE video_id = $1
          RETURNING *`,
-        [videoId, key]
+        [videoId, key, sizeMb]
     )
     return result.rows[0]
 }

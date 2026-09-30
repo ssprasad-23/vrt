@@ -72,7 +72,9 @@ export const completeUpload = async (req, res, next) => {
         // transcode worker skips jobs that are already completed.
         await sendTranscodeJob(video.video_id, video.original_s3_key)
 
-        const updated = await markVideoUploaded(id)
+        // MB with 1 decimal (e.g. 16.2), same as the size in the encoded files' names
+        const originalSizeMb = Number((uploadedSize / (1024 * 1024)).toFixed(1))
+        const updated = await markVideoUploaded(id, originalSizeMb)
         handleResponse(res, 200, "Upload marked complete", updated)
     } catch (err) {
         next(err)

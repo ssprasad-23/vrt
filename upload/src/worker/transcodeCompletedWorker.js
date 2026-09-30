@@ -3,9 +3,9 @@ import { sqsClient, TRANSCODE_COMPLETED_QUEUE_URL } from '../config/sqsConfig.js
 import { setEncodedKey, ENCODED_KEY_COLUMNS } from '../models/videoModels.js';
 import { log, logError } from '../utility/logger.js';
 
-// Consumes { videoId, codec, outputKey } messages sent by the transcode service each time one of
-// a video's outputs finishes (H.264 first, then AV1), and saves outputKey in that codec's column
-// (h264_s3_key / av1_s3_key). Resolving acks the message; throwing leaves it on the queue for
+// Consumes { videoId, codec, outputKey, sizeMb } messages sent by the transcode service each time
+// one of a video's outputs finishes (H.264 first, then AV1), and saves outputKey and sizeMb in that
+// codec's columns (h264_s3_key + h264_size_mb / av1_s3_key + av1_size_mb). Resolving acks the message; throwing leaves it on the queue for
 // SQS to redeliver. Setting the same key twice is harmless, so duplicate messages are fine.
 async function processMessage(message) {
   let payload;
@@ -15,8 +15,9 @@ async function processMessage(message) {
     throw new Error(`Bad transcode completion message (MessageId=${message.MessageId}): body is not valid JSON`);
   }
 
-  // messages sent before H.264 was added have no codec — they were always AV1
-  const { videoId, outputKey, codec = 'av1' } = payload;
+  // messages sent before H.264 was added have no codec — they were always AV1;
+  // ones sent before sizes were added have no sizeMb
+  const { videoId, outputKey, codec = 'av1', sizeMb = null } = payload;
   if (!videoId || !outputKey) {
     throw new Error(`Bad transcode completion message (MessageId=${message.MessageId}): videoId and outputKey are required`);
   }
@@ -26,13 +27,13 @@ async function processMessage(message) {
     return;
   }
 
-  const video = await setEncodedKey(videoId, codec, outputKey);
+  const video = await setEncodedKey(videoId, codec, outputKey, sizeMb);
   if (!video) {
     // no such video row — retrying won't create it, so ack and move on
     logError(`Transcode completion for unknown videoId=${videoId}, ignoring`);
     return;
   }
-  log(`Transcoded ${codec} key saved for video ${videoId}: ${outputKey}`);
+  log(`Transcoded ${codec} key saved for video ${videoId}: ${outputKey} (${sizeMb}MB)`);
 }
 
 export function startTranscodeCompletedWorker() {

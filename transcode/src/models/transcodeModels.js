@@ -1,11 +1,13 @@
 import pool from '../config/configDB.js'
 
+// settings is the ENCODING_OUTPUTS array. Stringified because pg sends a JS array as a Postgres
+// array literal ({...}), which the JSONB column rejects; plain objects would be JSON-encoded anyway.
 export const createTranscodeJob = async (videoId, sourceKey, settings) => {
     const result = await pool.query(
       `INSERT INTO transcode_jobs (video_id, source_key, settings, status)
        VALUES ($1, $2, $3, 'pending')
        RETURNING *`,
-      [videoId, sourceKey, settings])
+      [videoId, sourceKey, JSON.stringify(settings)])
     return result.rows[0]
 }
 
