@@ -3,7 +3,7 @@ import { sqsClient, TRANSCODE_QUEUE_URL, TRANSCODE_COMPLETED_QUEUE_URL } from '.
 import { ensureTranscodeJob, runTranscodeJob, missingOutputs } from '../services/transcodeService.js';
 import { markTranscodeCompleted } from '../models/transcodeModels.js';
 import { log, logError } from '../utility/logger.js';
-import { ORIGINAL_BUCKET, getObjectSize } from '../utility/s3.js';
+import { MEDIA_BUCKET, ORIGINAL_BUCKET, getObjectSize } from '../utility/s3.js';
 import { sendTranscodeCompleted } from '../utility/sqs.js';
 
 // Lease held on an in-flight message. ffmpeg encodes can run for minutes, so the
@@ -40,9 +40,11 @@ async function processMessage(message) {
 
   // Resend a completion for every output already saved: a previous delivery may have encoded
   // it but failed to send, and this is the only chance upload gets to learn the key.
-  // Duplicates are harmless (upload just sets the same key again).
+  // Duplicates are harmless (upload just sets the same key again). Only the key is saved in
+  // job.outputs, so the size is read back from the uploaded file.
   for (const [codec, outputKey] of Object.entries(job.outputs || {})) {
-    await sendTranscodeCompleted(videoId, codec, outputKey);
+    const sizeBytes = await getObjectSize(MEDIA_BUCKET, outputKey);
+    await sendTranscodeCompleted(videoId, codec, outputKey, sizeBytes);
   }
 
   if (missingOutputs(job).length === 0) {
@@ -56,8 +58,8 @@ async function processMessage(message) {
     // each output is reported the moment it's saved, so H.264 reaches the feed before AV1 finishes.
     // If a send fails the handler throws, SQS redelivers, and the resend loop above covers it —
     // outputs already saved are not re-encoded.
-    const { sourceBytes, encodedBytes } = await runTranscodeJob(videoId, (codec, outputKey) =>
-      sendTranscodeCompleted(videoId, codec, outputKey)
+    const { sourceBytes, encodedBytes } = await runTranscodeJob(videoId, (codec, outputKey, sizeBytes) =>
+      sendTranscodeCompleted(videoId, codec, outputKey, sizeBytes)
     );
     const summary = Object.entries(encodedBytes).map(([codec, bytes]) => `${codec} ${formatMb(bytes)}`).join(', ');
     log(`Transcode message processed: videoId=${videoId} (original ${formatMb(sourceBytes)} -> ${summary})`);

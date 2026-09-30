@@ -41,4 +41,12 @@ async function migrateEncodedKeys() {
     log("Renamed videos.transcoded_s3_key to av1_s3_key");
   }
   await db.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS h264_s3_key VARCHAR(1024)`);
+
+  // size columns (MB) added later
+  await db.query(`
+    ALTER TABLE videos
+      ADD COLUMN IF NOT EXISTS original_size_mb NUMERIC(10, 1),
+      ADD COLUMN IF NOT EXISTS h264_size_mb NUMERIC(10, 1),
+      ADD COLUMN IF NOT EXISTS av1_size_mb NUMERIC(10, 1)
+  `);
 }

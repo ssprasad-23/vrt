@@ -64,7 +64,7 @@ export function missingOutputs(job) {
 // each missing output (H.264, then AV1 — see src/config/encodingOutputs.js) from that same
 // original, never from another output. Each finished output is uploaded to the media bucket as
 // {videoId}/{videoId}_{codec}_{N}_{size}MB.{container}, saved in transcode_jobs.outputs, and
-// passed to onOutput(name, key) straight away — so the fast H.264 encode reaches the feed
+// passed to onOutput(name, key, sizeBytes) straight away — so the fast H.264 encode reaches the feed
 // without waiting for AV1. Outputs already saved by an earlier attempt are skipped.
 // Any step failing (including a video over 120s) fails the job; a retry resumes from the
 // first missing output. Assumes a transcode_jobs row already exists (see ensureTranscodeJob).
@@ -124,7 +124,7 @@ export async function runTranscodeJob(videoId, onOutput = async () => {}) {
             await uploadFileToS3(MEDIA_BUCKET, outputKey, outputPath, contentType);
 
             await saveTranscodeOutput(videoId, settings.name, outputKey);
-            await onOutput(settings.name, outputKey);
+            await onOutput(settings.name, outputKey, sizeBytes);
             encodedBytes[settings.name] = sizeBytes;
 
             // done with this output — free the disk space before the next encode
