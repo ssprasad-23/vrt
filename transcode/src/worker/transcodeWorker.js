@@ -20,6 +20,11 @@ const HEARTBEAT_INTERVAL = Number(process.env.SQS_HEARTBEAT_INTERVAL) || 60;
 // it visible again after the visibility timeout and redelivers it, up to the queue's
 // maxReceiveCount before it goes to the dead-letter queue (both configured on the
 // queue itself, not here).
+//
+// The handler records why its message is being acked in deleteNotes; the line is logged
+// from the consumer's message_processed event, which fires only after SQS deleted it.
+const deleteNotes = new Map(); // MessageId -> "<videoId> <reason>"
+
 async function processMessage(message) {
   let payload;
   try {
@@ -34,7 +39,7 @@ async function processMessage(message) {
   }
 
   const originalBytes = await getObjectSize(ORIGINAL_BUCKET, key);
-  log(`Transcode message received: videoId=${videoId} (original ${originalBytes === null ? 'missing' : formatMb(originalBytes)})`);
+  log(`${videoId} SQS received: transcode job (original ${originalBytes === null ? 'missing' : formatMb(originalBytes)})`);
 
   const { job } = await ensureTranscodeJob(videoId, key);
 
@@ -50,7 +55,7 @@ async function processMessage(message) {
   if (missingOutputs(job).length === 0) {
     // everything was encoded on a previous delivery (maybe it crashed before marking the job)
     if (job.status !== 'completed') await markTranscodeCompleted(videoId);
-    log(`Transcode message skipped: videoId=${videoId} already has all outputs`);
+    deleteNotes.set(message.MessageId, `${videoId} SQS delete: transcode job skipped, already has all outputs`);
     return; // ack so it isn't redelivered
   }
 
@@ -62,13 +67,14 @@ async function processMessage(message) {
       sendTranscodeCompleted(videoId, codec, outputKey, sizeBytes)
     );
     const summary = Object.entries(encodedBytes).map(([codec, bytes]) => `${codec} ${formatMb(bytes)}`).join(', ');
-    log(`Transcode message processed: videoId=${videoId} (original ${formatMb(sourceBytes)} -> ${summary})`);
+    deleteNotes.set(message.MessageId, `${videoId} SQS delete: transcode job processed (original ${formatMb(sourceBytes)} -> ${summary})`);
   } catch (err) {
     // The original is gone from the bucket — retrying can't bring it back, so ack the
     // message instead of letting SQS redeliver it forever. runTranscodeJob has already
     // marked the job 'failed' with this error.
     if (err.name === 'NoSuchKey') {
       logError(`Transcode failed for videoId=${videoId}: original ${key} not found in bucket, giving up`);
+      deleteNotes.set(message.MessageId, `${videoId} SQS delete: transcode job given up, original missing`);
       return;
     }
     throw err;
@@ -93,13 +99,22 @@ export function startTranscodeWorker() {
     heartbeatInterval: HEARTBEAT_INTERVAL,
   });
 
+  // emitted after the acked message was deleted from the queue
+  consumer.on('message_processed', (message) => {
+    const note = deleteNotes.get(message.MessageId);
+    deleteNotes.delete(message.MessageId);
+    if (note) log(note);
+  });
+
   // sqs-consumer wraps the handler's error; the original is on err.cause.
   consumer.on('processing_error', (err, message) => {
     const { videoId } = safeParse(message?.Body);
     logError(`Transcode failed for videoId=${videoId}:`, err.cause?.message ?? err.message);
   });
 
-  consumer.on('error', (err) => {
+  // also emitted when deleting an acked message fails — it'll be redelivered, so drop its note
+  consumer.on('error', (err, message) => {
+    if (message) deleteNotes.delete(message.MessageId);
     logError('SQS consumer error:', err.message);
   });
 

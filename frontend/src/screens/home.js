@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from "react";
-import {View, FlatList, Dimensions, StatusBar, TouchableOpacity, Text, StyleSheet, Modal, Pressable, ActivityIndicator, RefreshControl} from "react-native";
+import {View, FlatList, useWindowDimensions, StatusBar, TouchableOpacity, Text, StyleSheet, Modal, Pressable, ActivityIndicator, RefreshControl} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
 import Post from "../components/Post";
@@ -7,13 +7,14 @@ import apiClient from "../api/client";
 import {fetchFeed, toPost} from "../api/feed";
 import {useAuth} from "../context/AuthContext";
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 // a video counts as "on screen" (and plays) once most of it is visible
 const VIEWABILITY_CONFIG = {itemVisiblePercentThreshold: 80};
 
 const Home = ({navigation}) => {
   const insets = useSafeAreaInsets();
+  // live window size: changes when the phone is rotated, and every post is exactly one screen tall
+  const {height: screenHeight} = useWindowDimensions();
+  const flatListRef = useRef(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const {setAccessToken} = useAuth();
   // pause the feed while another screen (e.g. the Upload modal) is on top
@@ -61,6 +62,15 @@ const Home = ({navigation}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Rotating changes every item's offset (index * screenHeight); jump back to the video that
+  // was on screen so the list doesn't land between two of them.
+  useEffect(() => {
+    if (posts.length > 0 && activeIndex < posts.length) {
+      flatListRef.current?.scrollToIndex({index: activeIndex, animated: false});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenHeight]);
+
   // must be a stable reference — FlatList doesn't allow changing it on the fly
   const onViewableItemsChanged = useRef(({viewableItems}) => {
     if (viewableItems.length > 0 && viewableItems[0].index != null) {
@@ -97,13 +107,14 @@ const Home = ({navigation}) => {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={posts}
           keyExtractor={item => item.id}
           renderItem={({item, index}) => (
-            <Post post={item} isActive={isFocused && index === activeIndex} />
+            <Post post={item} height={screenHeight} isActive={isFocused && index === activeIndex} />
           )}
-          getItemLayout={(_, index) => ({length: SCREEN_HEIGHT, offset: SCREEN_HEIGHT * index, index})}
-          snapToInterval={SCREEN_HEIGHT}
+          getItemLayout={(_, index) => ({length: screenHeight, offset: screenHeight * index, index})}
+          snapToInterval={screenHeight}
           snapToAlignment="start"
           decelerationRate="fast"
           showsVerticalScrollIndicator={false}
@@ -127,7 +138,7 @@ const Home = ({navigation}) => {
             ) : null
           }
           ListEmptyComponent={
-            <View style={[styles.centered, {height: SCREEN_HEIGHT}]}>
+            <View style={[styles.centered, {height: screenHeight}]}>
               <Text style={styles.emptyText}>{error ? 'Could not load the feed' : 'No videos yet'}</Text>
               <TouchableOpacity style={styles.retryButton} onPress={() => loadPage({reset: true})} activeOpacity={0.8}>
                 <Text style={styles.retryText}>{error ? 'Retry' : 'Refresh'}</Text>
@@ -138,7 +149,8 @@ const Home = ({navigation}) => {
       )}
 
       <TouchableOpacity
-        style={[styles.menuButton, {top: insets.top - 3}]}
+        // in landscape insets.top is 0 and the Dynamic Island/notch moves to a side edge
+        style={[styles.menuButton, {top: Math.max(insets.top - 3, 12), right: 16 + insets.right}]}
         onPress={() => setMenuVisible(true)}
         activeOpacity={0.8}>
         <Text style={styles.menuDots}>⋮</Text>
@@ -148,9 +160,11 @@ const Home = ({navigation}) => {
         visible={menuVisible}
         transparent
         animationType="fade"
+        // iOS Modals are portrait-only unless told otherwise, which would rotate the app back
+        supportedOrientations={['portrait', 'landscape']}
         onRequestClose={() => setMenuVisible(false)}>
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
-          <View style={[styles.menuDropdown, {top: insets.top + 34}]}>
+          <View style={[styles.menuDropdown, {top: Math.max(insets.top - 3, 12) + 37, right: 16 + insets.right}]}>
             <TouchableOpacity style={styles.menuItem} onPress={handleUpload} activeOpacity={0.7}>
               <Text style={styles.menuItemText}>Upload</Text>
             </TouchableOpacity>

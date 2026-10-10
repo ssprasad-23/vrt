@@ -15,6 +15,6 @@ export async function sendTranscodeJob(videoId, key) {
   });
 
   const result = await sqsClient.send(command);
-  log(`Transcode job queued for video ${videoId} (MessageId=${result.MessageId})`);
+  log(`${videoId} SQS sent: transcode job`);
   return result.MessageId;
 }

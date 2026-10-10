@@ -14,11 +14,7 @@ import Video from 'react-native-video';
 import styles from './uploadStyles';
 import {videoClient} from '../api/client';
 
-const categories = [
-  'Meme',
-  'Car Community',
-  'Food & Recepie',
-];
+const categories = ['Videos'];
 
 const UploadPage = ({navigation}) => {
   const [video, setVideo] = useState(null);

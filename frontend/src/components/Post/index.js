@@ -1,6 +1,6 @@
 import React from "react";
 import { useEffect, useState } from "react";
-import {View, Text, Image, TouchableOpacity} from "react-native";
+import {View, Text, Image, TouchableOpacity, useWindowDimensions} from "react-native";
 import Video from "react-native-video";
 import styles from "./styles";
 import { TouchableWithoutFeedback } from "react-native";
@@ -11,19 +11,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const Post = (props) => {
 
   const insets = useSafeAreaInsets();
+  const screen = useWindowDimensions();
   const [post, setPost] = useState(props.post);
   const [isLiked, setIsLiked] = useState(false);
   const [isDisliked, setIsDisliked] = useState(false);
   const [paused, setPaused] = useState(false);
-  // portrait videos fill the screen ('cover'); landscape ones are shown whole with black bars
-  // ('contain') instead of having ~3/4 of their width cropped. 'contain' until the size is known.
-  const [resizeMode, setResizeMode] = useState('contain');
+  const [videoSize, setVideoSize] = useState(null);
 
   const onVideoLoad = ({naturalSize}) => {
-    if (naturalSize?.width && naturalSize?.height) {
-      setResizeMode(naturalSize.height > naturalSize.width ? 'cover' : 'contain');
-    }
+    if (naturalSize?.width && naturalSize?.height) setVideoSize(naturalSize);
   };
+
+  // Fill the screen ('cover') when the video and the screen have the same orientation — a
+  // portrait video on an upright phone, a landscape one with the phone sideways. Otherwise show
+  // it whole with black bars ('contain'): 'cover' would crop ~3/4 of it. 'contain' until the
+  // size is known.
+  const videoIsPortrait = videoSize && videoSize.height > videoSize.width;
+  const screenIsPortrait = screen.height > screen.width;
+  const resizeMode = videoSize && videoIsPortrait === screenIsPortrait ? 'cover' : 'contain';
+
+  // in landscape the Dynamic Island/notch is on a side edge and insets.top is 0
+  const sideInsets = {paddingLeft: insets.left, paddingRight: insets.right};
+  const avatarTop = Math.max(insets.top - 3, 12);
   // only the on-screen video in the feed plays; `paused` is just the user's tap-to-pause
   const isActive = props.isActive ?? true;
 
@@ -57,7 +66,7 @@ const Post = (props) => {
   }
 
   return (
-    <View style = {styles.container}>
+    <View style = {[styles.container, {height: props.height ?? screen.height}]}>
       <TouchableWithoutFeedback onPress={onPlayPausePress}>
         <Video
         style = {styles.video}
@@ -78,8 +87,8 @@ const Post = (props) => {
       </TouchableWithoutFeedback>
 
 
-      <View style = {styles.uiContainer}>
-        <View style = {styles.rightContainer}>
+      <View style = {[styles.uiContainer, sideInsets]}>
+        <View style = {[styles.rightContainer, {right: insets.right}]}>
           <TouchableOpacity style={styles.actionButton} onPress={onLikePress}>
             <Entypo style = {styles.heart} name='heart' size={30} color={isLiked ? '#FF3B30' : 'white'}/>
             <Text style={styles.actionLabel}>{post.likes}</Text>
@@ -97,9 +106,9 @@ const Post = (props) => {
       </View>
 
       {post.user.imageUri ? (
-        <Image style = {[styles.profilePic, {top: insets.top - 3}]} source={{uri: post.user.imageUri}}/>
+        <Image style = {[styles.profilePic, {top: avatarTop, left: 16 + insets.left}]} source={{uri: post.user.imageUri}}/>
       ) : (
-        <View style = {[styles.profilePic, styles.profilePlaceholder, {top: insets.top - 3}]}>
+        <View style = {[styles.profilePic, styles.profilePlaceholder, {top: avatarTop, left: 16 + insets.left}]}>
           <Text style = {styles.profileInitial}>{post.user.username?.[0]?.toUpperCase()}</Text>
         </View>
       )}
