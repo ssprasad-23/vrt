@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import db from "./src/config/configDB.js";
+import { connectRedis } from "./src/config/redisConfig.js";
 import feedRouter from "./src/routes/feedRouters.js";
 import { log, logError } from "./src/utility/logger.js";
 
@@ -25,6 +26,10 @@ app.use((err, req, res, next) => {
     // service — this service only reads it, so there's no initDb() here.
     await db.query("SELECT 1");
     log("Feed database connected successfully");
+
+    // Redis is optional (it only caches the first feed page), so unlike the DB check
+    // above, a Redis outage doesn't stop the server from starting.
+    connectRedis();
 
     app.listen(PORT, () => {
       log(`Server running at http://localhost:${PORT}`);

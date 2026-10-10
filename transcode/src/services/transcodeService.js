@@ -110,9 +110,6 @@ export async function runTranscodeJob(videoId, onOutput = async () => {}) {
 
             const { width, height } = await probeDimensions(outputPath);
             const { size: sizeBytes } = await fs.stat(outputPath);
-            if (sizeBytes >= sourceBytes) {
-                logError(`Encoded ${settings.name} file for videoId=${videoId} is not smaller than the original (${sourceBytes} -> ${sizeBytes} bytes) — consider a higher crf in its encoding config`);
-            }
             const outputKey = buildEncodedKey(videoId, {
                 videoCodec: settings.videoCodec,
                 width,

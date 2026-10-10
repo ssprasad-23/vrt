@@ -23,9 +23,11 @@ Express 5 REST API using ES modules (`"type": "module"`). Structure mirrors the 
 
 **Pagination** is keyset on `(created_at, video_id)` DESC — `nextCursor` (`src/utility/cursor.js`) is the last row of the page, base64url-encoded, and `null` when there's nothing more. The controller fetches `limit + 1` rows to know if another page exists. The cursor keeps `created_at` as Postgres text (`created_at::text`, microsecond precision) — a JS `Date` rounds to milliseconds and would skip/repeat rows at page boundaries.
 
+**Redis cache** (`src/config/redisConfig.js`, used in `feedController.js`): the first page only (no cursor, `limit` = 3) is cached as `feed:first` for 30s, cache-aside. Responses carry `X-Cache: HIT` / `MISS` / `BYPASS` (cursor pages get no header), and each decision is logged as `Redis HIT: …` / `Redis MISS: …` / `Redis SET: …` / `Redis BYPASS: …`. On a miss the response is sent first and the `SET` runs in the background; an empty page is not cached (logged as `Redis SET skipped: …`). Fail-open: if Redis is down the service still starts (`connectRedis()` isn't awaited, the client reconnects in the background, `disableOfflineQueue` makes commands fail fast) and requests fall through to Postgres. No invalidation — a new video can take up to 30s to reach the top. Setup and design notes: `../redis/README.md`.
+
 ## Local dev / run instructions
 
-`.env`: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT` (same DB as `upload`), `PORT` (3003), `GATEWAY_SECRET` (must match the gateway's). The gateway reaches it via `FEED_SERVICE_URL` (default `http://localhost:3003`).
+`.env`: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT` (same DB as `upload`), `PORT` (3003), `GATEWAY_SECRET` (must match the gateway's), `REDIS_URL` (default `redis://localhost:6379`; Redis is optional). The gateway reaches it via `FEED_SERVICE_URL` (default `http://localhost:3003`).
 
 ## Known issues
 

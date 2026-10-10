@@ -36,5 +36,19 @@ target 'frontend' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # RN 0.76's codegen phase runs `/bin/sh -c "$WITH_ENVIRONMENT $SCRIPT_PHASES_SCRIPT"`, and
+    # with-environment.sh then runs its argument unquoted, so both break when the project path
+    # contains a space ("short video"). Load the environment first, then run the script by its
+    # quoted path instead.
+    installer.pods_project.targets.each do |target|
+      target.shell_script_build_phases.each do |phase|
+        next unless phase.shell_script&.include?('/bin/sh -c "$WITH_ENVIRONMENT $SCRIPT_PHASES_SCRIPT"')
+        phase.shell_script = phase.shell_script.sub(
+          '/bin/sh -c "$WITH_ENVIRONMENT $SCRIPT_PHASES_SCRIPT"',
+          ". \"$WITH_ENVIRONMENT\"\n\"$SCRIPT_PHASES_SCRIPT\""
+        )
+      end
+    end
   end
 end
