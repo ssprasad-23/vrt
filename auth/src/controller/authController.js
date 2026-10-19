@@ -14,6 +14,7 @@ import { generateAccessToken,
          refreshTokenExpiresAt,
          REFRESH_TOKEN_MAX_AGE_MS } from '../utility/tokens.js';
 import { log, logError } from "../utility/logger.js"
+import { validateSignup, validateLogin, normalizePhone } from "../utility/validation.js"
 
 
 //Standardise response function
@@ -25,16 +26,33 @@ const handleResponse = (res, status, message, data=null) => {
     })
 }
 
+// Unique indexes on users (see src/data/createTable.js) -> what to tell the client on a clash
+const DUPLICATE_MESSAGES = {
+    users_username_lower_key: "Username is already taken",
+    users_email_lower_key: "An account with this email already exists",
+}
+
 //signup
 export const createUser = async (req, res, next) => {
+    const invalid = validateSignup(req.body ?? {})
+    if (invalid) {
+        return handleResponse(res, 400, invalid)
+    }
     const { username, email, password, dob, phone_number, country } = req.body
     try {
-        const signUp = await createUserService(username, email, password, dob, phone_number, country)
+        const signUp = await createUserService(
+            username.trim(),
+            email.trim().toLowerCase(),
+            password,
+            dob,
+            normalizePhone(phone_number) || null,
+            country.trim(),
+        )
         handleResponse(res, 201, "User created successfully", signUp)
         log("User created successfully")
     } catch (err) {
         if (err.code === '23505') {  // PostgreSQL unique violation code
-            return handleResponse(res, 409, "Error Creating User")
+            return handleResponse(res, 409, DUPLICATE_MESSAGES[err.constraint] || "Account already exists")
         }
         next(err)
     }
@@ -57,6 +75,10 @@ const clearRefreshCookie = (res) => {
 
 //login
 export const loginUser = async (req, res, next) => {
+    const invalid = validateLogin(req.body ?? {})
+    if (invalid) {
+        return handleResponse(res, 400, invalid)
+    }
     const { username, password } = req.body
     try {
         const user = await loginUserService(username, password)

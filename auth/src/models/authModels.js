@@ -16,7 +16,8 @@ export const createUserService = async (username, email, password, dob, phone_nu
 
 export const loginUserService = async (username, password) => {
     const result = await pool.query(
-        "SELECT * FROM users WHERE username = $1", [username]
+        // usernames are unique case-insensitively (users_username_lower_key), so log in the same way
+        "SELECT * FROM users WHERE lower(username) = lower($1)", [username.trim()]
     )
     const user = result.rows[0]
     if (!user) {

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { log } from './logger.js';
 
@@ -36,7 +36,11 @@ export async function getUploadedSize(key) {
   }
 }
 
-//working
+// Removes an uploaded original, e.g. one rejected for being over the size limit.
+export async function deleteUploadedObject(key) {
+  await s3.send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }));
+}
+
 // Generates a pre-signed S3 URL that allows a client to upload a file
 // directly to S3 (via PUT request) without routing the file through
 // our own server, and without exposing AWS credentials to the client.

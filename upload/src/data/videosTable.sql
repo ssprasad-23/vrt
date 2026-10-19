@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS videos (
     content_type VARCHAR(100) NOT NULL,
     description TEXT,
     category VARCHAR(100),
+    -- pending (waiting for the file) -> uploaded (queued / transcoding) -> ready (H.264 playable)
+    -- or failed (failure_reason says why, in words the app can show the user)
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    failure_reason TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     uploaded_at TIMESTAMPTZ

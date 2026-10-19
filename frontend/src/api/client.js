@@ -69,19 +69,11 @@ const createClient = () => {
     withCredentials: true,
   });
 
+  // Never log the token itself — anything in the console can end up in crash reports and logs.
   client.interceptors.request.use(config => {
     const token = getAccessToken();
-    const timestamp = new Date().toLocaleTimeString();
     if (token) {
-      console.log(
-        `[${timestamp}] token sent for ${config.baseURL}${config.url}`,
-        token,
-      );
       config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.log(
-        `[${timestamp}] token not sent for ${config.baseURL}${config.url} - no token in AuthContext`,
-      );
     }
     return config;
   });

@@ -17,7 +17,7 @@ app.use("/", videoRouter);
 // centralized error handler (catches next(err) calls from the controller)
 app.use((err, req, res, next) => {
   logError(err);
-  res.status(500).json({ status: 500, message: "Something went wrongg", data: null });
+  res.status(500).json({ status: 500, message: "Something went wrong", data: null });
 });
 
 // startup sequence

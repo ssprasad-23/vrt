@@ -66,7 +66,7 @@ export function missingOutputs(job) {
 // {videoId}/{videoId}_{codec}_{N}_{size}MB.{container}, saved in transcode_jobs.outputs, and
 // passed to onOutput(name, key, sizeBytes) straight away — so the fast H.264 encode reaches the feed
 // without waiting for AV1. Outputs already saved by an earlier attempt are skipped.
-// Any step failing (including a video over 120s) fails the job; a retry resumes from the
+// Any step failing (including a video over 60s) fails the job; a retry resumes from the
 // first missing output. Assumes a transcode_jobs row already exists (see ensureTranscodeJob).
 export async function runTranscodeJob(videoId, onOutput = async () => {}) {
     const job = await findTranscodeJobById(videoId)

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import apiClient from '../api/client';
 import { customArray } from 'country-codes-list';
+import { getErrorMessage } from '../api/errors';
 
 const countryCodes = customArray(
   {
@@ -210,19 +211,15 @@ const SignupPage = ({ navigation }) => {
         email: email.trim(),
         password,
         dob: formattedDob,
-        phone_number: `${selectedCountry.code}${phone.trim()}`,
+        // some calling codes contain a space (e.g. '+1 242')
+        phone_number: `${selectedCountry.code}${phone.trim()}`.replace(/\s/g, ''),
         country: selectedCountry.name,
       }
 
-      const res = await apiClient.post('/auth/userSignUp', payload);
-
-      if (res.data?.errors) {
-        throw new Error(res.data.errors.map(e => e.message).join('; '));
-      }
+      await apiClient.post('/auth/userSignUp', payload);
       Alert.alert('Success', 'Account created. Please log in.', [{ text: 'OK', onPress: () => navigation.navigate('LoginPage') }]);
     } catch (err) {
-      console.error(err);
-      Alert.alert('Signup failed', err?.message || 'Network error');
+      Alert.alert('Signup failed', getErrorMessage(err));
     } finally {
       setLoading(false);
     }

@@ -2,12 +2,13 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 import { spawnFfmpeg } from './ffmpeg.js';
+import { PermanentTranscodeError } from './errors.js';
 
 const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
 
-// Only videos up to 120s are supported for now. Containers often report a hair over
-// the nominal length (e.g. 120.02s), so allow a small tolerance before rejecting.
-export const MAX_VIDEO_DURATION_SECONDS = 120;
+// Only videos up to 60s are supported (keep in sync with upload/src/config/uploadLimits.js and
+// frontend/src/api/uploadLimits.js). Containers often report a hair over the nominal length (e.g. 60.02s), so allow a small tolerance before rejecting.
+export const MAX_VIDEO_DURATION_SECONDS = 60;
 const DURATION_TOLERANCE_SECONDS = 1;
 
 // One frame is picked at a random point inside each window: 0-10s, 10-20s, 20-30s, ...
@@ -46,11 +47,19 @@ function runFfprobe(args) {
 }
 
 // Returns the source video's duration in seconds, via ffprobe.
+// It's the first thing run on an upload, so a file ffprobe can't read is permanently bad (not a
+// video, or corrupt) — unless ffprobe itself is missing, which is a server problem worth retrying.
 export async function probeDuration(inputPath) {
-  const stdout = await runFfprobe(['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', inputPath]);
+  let stdout;
+  try {
+    stdout = await runFfprobe(['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', inputPath]);
+  } catch (err) {
+    if (err.message.startsWith('Failed to start ffprobe')) throw err;
+    throw new PermanentTranscodeError("This file isn't a video we can read", { cause: err });
+  }
   const duration = parseFloat(stdout);
   if (!Number.isFinite(duration)) {
-    throw new Error(`ffprobe could not read video duration: ${stdout.slice(-2000)}`);
+    throw new PermanentTranscodeError("This file isn't a video we can read");
   }
   return duration;
 }
@@ -68,12 +77,12 @@ export async function probeDimensions(inputPath) {
 // Throws if the video is longer than the supported maximum.
 export function assertSupportedDuration(duration) {
   if (duration > MAX_VIDEO_DURATION_SECONDS + DURATION_TOLERANCE_SECONDS) {
-    throw new Error(`Video is ${duration.toFixed(1)}s long; only videos up to ${MAX_VIDEO_DURATION_SECONDS}s are supported`);
+    throw new PermanentTranscodeError(`Video is ${Math.round(duration)} seconds long — the limit is ${MAX_VIDEO_DURATION_SECONDS} seconds`);
   }
 }
 
-// Picks one random timestamp per 10s window across the whole video, e.g. 120s -> 12,
-// 60s -> 6, 25s -> 3 (the last window is cut short).
+// Picks one random timestamp per 10s window across the whole video, e.g. 60s -> 6,
+// 25s -> 3 (the last window is cut short).
 export function pickFrameTimestamps(duration) {
   const lastUsable = duration - END_MARGIN_SECONDS;
   const timestamps = [];

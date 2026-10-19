@@ -49,4 +49,10 @@ async function migrateEncodedKeys() {
       ADD COLUMN IF NOT EXISTS h264_size_mb NUMERIC(10, 1),
       ADD COLUMN IF NOT EXISTS av1_size_mb NUMERIC(10, 1)
   `);
+
+  // failed uploads/transcodes record why, so the app can tell the user
+  await db.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS failure_reason TEXT`);
+
+  // videos encoded before the 'ready' status existed stayed 'uploaded' even once playable
+  await db.query(`UPDATE videos SET status = 'ready' WHERE status = 'uploaded' AND h264_s3_key IS NOT NULL`);
 }

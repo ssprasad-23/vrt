@@ -4,13 +4,23 @@ import { ensureTranscodeJob, runTranscodeJob, missingOutputs } from '../services
 import { markTranscodeCompleted } from '../models/transcodeModels.js';
 import { log, logError } from '../utility/logger.js';
 import { MEDIA_BUCKET, ORIGINAL_BUCKET, getObjectSize } from '../utility/s3.js';
-import { sendTranscodeCompleted } from './outgoing.js';
+import { sendTranscodeCompleted, sendTranscodeFailed } from './outgoing.js';
+import { PermanentTranscodeError } from '../utility/errors.js';
 
 // Lease held on an in-flight message. ffmpeg encodes can run for minutes, so the
 // consumer extends it every SQS_HEARTBEAT_INTERVAL seconds (ChangeMessageVisibility)
 // until the handler resolves. heartbeatInterval must be < visibilityTimeout.
 const VISIBILITY_TIMEOUT = Number(process.env.SQS_VISIBILITY_TIMEOUT) || 300;
 const HEARTBEAT_INTERVAL = Number(process.env.SQS_HEARTBEAT_INTERVAL) || 60;
+
+// Deliveries before a video is given up on: the job is marked failed, the upload service is told
+// (so the user sees why), and the message is acked. Keep it below the queue's DLQ maxReceiveCount
+// (scripts/setupQueues.js uses 5) so this path, not the DLQ, handles ordinary failures; the DLQ
+// only catches messages this handler can't process at all.
+const MAX_ATTEMPTS = Number(process.env.TRANSCODE_MAX_ATTEMPTS) || 3;
+
+// Reason sent to the user when retries run out — the real error stays in the logs and transcode_jobs.
+const GENERIC_FAILURE_REASON = 'Video could not be processed';
 
 // Consumes messages whose body is JSON: { videoId, key } — key is the original's S3 object
 // key in the original bucket (sent by the upload service when an upload completes). Which outputs
@@ -26,6 +36,25 @@ const HEARTBEAT_INTERVAL = Number(process.env.SQS_HEARTBEAT_INTERVAL) || 60;
 const deleteNotes = new Map(); // MessageId -> "<videoId> <reason>"
 
 async function processMessage(message) {
+  const attempt = Number(message.Attributes?.ApproximateReceiveCount) || 1;
+  try {
+    await handleJob(message);
+  } catch (err) {
+    const { videoId } = safeParse(message.Body);
+    const permanent = err instanceof PermanentTranscodeError;
+    if (!videoId || (!permanent && attempt < MAX_ATTEMPTS)) {
+      throw err; // SQS redelivers after the visibility timeout (or, with no videoId, moves it to the DLQ)
+    }
+
+    // give up: retrying can't fix it, or this was the last attempt
+    const reason = permanent ? err.message : GENERIC_FAILURE_REASON;
+    logError(`Transcode failed for videoId=${videoId} (attempt ${attempt}/${MAX_ATTEMPTS}${permanent ? ', permanent' : ''}): ${err.message}`);
+    await sendTranscodeFailed(videoId, reason);
+    deleteNotes.set(message.MessageId, `${videoId} SQS delete: transcode job given up — ${reason}`);
+  }
+}
+
+async function handleJob(message) {
   let payload;
   try {
     payload = JSON.parse(message.Body);
@@ -69,13 +98,11 @@ async function processMessage(message) {
     const summary = Object.entries(encodedBytes).map(([codec, bytes]) => `${codec} ${formatMb(bytes)}`).join(', ');
     deleteNotes.set(message.MessageId, `${videoId} SQS delete: transcode job processed (original ${formatMb(sourceBytes)} -> ${summary})`);
   } catch (err) {
-    // The original is gone from the bucket — retrying can't bring it back, so ack the
-    // message instead of letting SQS redeliver it forever. runTranscodeJob has already
+    // The original is gone from the bucket — retrying can't bring it back, so give up now
+    // (processMessage acks it and reports the failure). runTranscodeJob has already
     // marked the job 'failed' with this error.
     if (err.name === 'NoSuchKey') {
-      logError(`Transcode failed for videoId=${videoId}: original ${key} not found in bucket, giving up`);
-      deleteNotes.set(message.MessageId, `${videoId} SQS delete: transcode job given up, original missing`);
-      return;
+      throw new PermanentTranscodeError('The uploaded file could not be found', { cause: err });
     }
     throw err;
   }
@@ -97,6 +124,9 @@ export function startTranscodeJobConsumer() {
     waitTimeSeconds: 20, // long polling
     visibilityTimeout: VISIBILITY_TIMEOUT,
     heartbeatInterval: HEARTBEAT_INTERVAL,
+    // delivery count, so processMessage knows when it's on the last attempt
+    attributeNames: ['ApproximateReceiveCount'],
+    messageSystemAttributeNames: ['ApproximateReceiveCount'],
   });
 
   // emitted after the acked message was deleted from the queue

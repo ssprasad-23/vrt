@@ -6,6 +6,7 @@ import Post from "../components/Post";
 import apiClient from "../api/client";
 import {fetchFeed, toPost} from "../api/feed";
 import {useAuth} from "../context/AuthContext";
+import {stopTrackingUploads} from "../api/uploadStatus";
 
 // a video counts as "on screen" (and plays) once most of it is visible
 const VIEWABILITY_CONFIG = {itemVisiblePercentThreshold: 80};
@@ -87,6 +88,7 @@ const Home = ({navigation}) => {
       console.error(err);
     }
     setAccessToken(null);
+    stopTrackingUploads();
     navigation.reset({
       index: 0,
       routes: [{name: 'LoginPage'}],

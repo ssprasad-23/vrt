@@ -13,6 +13,13 @@ import {launchImageLibrary} from 'react-native-image-picker';
 import Video from 'react-native-video';
 import styles from './uploadStyles';
 import apiClient from '../api/client';
+import {getErrorMessage} from '../api/errors';
+import {trackUpload} from '../api/uploadStatus';
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MB,
+  MAX_VIDEO_DURATION_SECONDS,
+} from '../api/uploadLimits';
 
 const categories = ['Videos'];
 
@@ -26,7 +33,20 @@ const UploadPage = ({navigation}) => {
     const result = await launchImageLibrary({mediaType: 'video'});
     if (result.didCancel || result.errorCode) return;
     const asset = result.assets?.[0];
-    if (asset) setVideo(asset);
+    if (!asset) return;
+    // turn away over-limit videos now, not after a long upload (the server checks again)
+    if (asset.duration > MAX_VIDEO_DURATION_SECONDS + 1) {
+      Alert.alert(
+        'Video too long',
+        `Videos can be up to ${MAX_VIDEO_DURATION_SECONDS} seconds. This one is ${Math.round(asset.duration)} seconds.`,
+      );
+      return;
+    }
+    if (asset.fileSize > MAX_UPLOAD_BYTES) {
+      Alert.alert('Video too large', `Videos can be up to ${MAX_UPLOAD_MB} MB.`);
+      return;
+    }
+    setVideo(asset);
   };
 
   const handleUpload = async () => {
@@ -44,6 +64,8 @@ const UploadPage = ({navigation}) => {
       const initRes = await apiClient.post('/videos/upload-init', {
         description,
         category,
+        sizeBytes: video.fileSize,
+        durationSeconds: video.duration,
       });
       const {videoId, uploadUrl} = initRes.data.data;
       console.log('signed url received from upload-init');
@@ -62,12 +84,16 @@ const UploadPage = ({navigation}) => {
 
       await apiClient.post(`/videos/${videoId}/complete`);
 
-      Alert.alert('Success', 'Your video has been uploaded.', [
-        {text: 'OK', onPress: () => navigation.goBack()},
-      ]);
+      // Uploaded isn't live yet: it still has to be transcoded, and that can fail (e.g. an
+      // unreadable file). trackUpload tells the user which way it went once it's done.
+      trackUpload(videoId);
+      Alert.alert(
+        'Uploaded',
+        "We're processing your video. We'll let you know when it's live.",
+        [{text: 'OK', onPress: () => navigation.goBack()}],
+      );
     } catch (err) {
-      console.error(err);
-      Alert.alert('Upload failed', err?.message || 'Network error');
+      Alert.alert('Upload failed', getErrorMessage(err));
     } finally {
       setUploading(false);
     }

@@ -17,3 +17,17 @@ export async function sendTranscodeCompleted(videoId, codec, outputKey, sizeByte
   log(`${videoId} SQS sent: ${codec} completion${sizeMb == null ? '' : ` (${sizeMb}MB)`}`);
   return result.MessageId;
 }
+
+// Tells the upload service a video will never be encoded (too long, unreadable, or out of
+// retries). Sent on the same queue as completions: { videoId, status: 'failed', reason }, where
+// reason is shown to the user.
+export async function sendTranscodeFailed(videoId, reason) {
+  const command = new SendMessageCommand({
+    QueueUrl: TRANSCODE_COMPLETED_QUEUE_URL,
+    MessageBody: JSON.stringify({ videoId, status: 'failed', reason }),
+  });
+
+  const result = await sqsClient.send(command);
+  log(`${videoId} SQS sent: transcode failed — ${reason}`);
+  return result.MessageId;
+}
