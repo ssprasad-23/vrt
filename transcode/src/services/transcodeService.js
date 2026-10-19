@@ -13,7 +13,6 @@ import {
     MEDIA_BUCKET,
     ORIGINAL_BUCKET,
     buildEncodedKey,
-    buildFrameKey,
     uploadFileToS3,
 } from '../utility/s3.js';
 import { downloadFromS3 } from '../utility/download.js';
@@ -22,9 +21,8 @@ import {
     probeDuration,
     probeDimensions,
     assertSupportedDuration,
-    pickFrameTimestamps,
-    extractFrames,
-} from '../utility/frameExtraction.js';
+} from '../utility/probe.js';
+import { extractAndUploadFrames } from './frameExtraction.js';
 import { ENCODING_OUTPUTS } from '../config/encodingOutputs.js';
 import { logError } from "../utility/logger.js";
 
@@ -97,10 +95,7 @@ export async function runTranscodeJob(videoId, onOutput = async () => {}) {
         const duration = await probeDuration(inputPath);
         assertSupportedDuration(duration);
         if (Object.keys(job.outputs || {}).length === 0) {
-            const frames = await extractFrames(inputPath, jobDir, pickFrameTimestamps(duration));
-            for (const frame of frames) {
-                await uploadFileToS3(MEDIA_BUCKET, buildFrameKey(videoId, frame.index), frame.path, 'image/jpeg');
-            }
+            await extractAndUploadFrames(videoId, inputPath, jobDir, duration);
         }
 
         const encodedBytes = {}

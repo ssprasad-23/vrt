@@ -1,7 +1,4 @@
 import { spawn } from 'child_process';
-import fs from 'fs/promises';
-import path from 'path';
-import { spawnFfmpeg } from './ffmpeg.js';
 import { PermanentTranscodeError } from './errors.js';
 
 const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
@@ -10,13 +7,6 @@ const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
 // frontend/src/api/uploadLimits.js). Containers often report a hair over the nominal length (e.g. 60.02s), so allow a small tolerance before rejecting.
 export const MAX_VIDEO_DURATION_SECONDS = 60;
 const DURATION_TOLERANCE_SECONDS = 1;
-
-// One frame is picked at a random point inside each window: 0-10s, 10-20s, 20-30s, ...
-// for the whole length of the video.
-const SEGMENT_SECONDS = 10;
-
-// Seeking to the very last instant can return no frame, so stay this far from the end.
-const END_MARGIN_SECONDS = 0.5;
 
 // Runs ffprobe and resolves with its stdout, rejecting with stderr on a non-zero exit.
 function runFfprobe(args) {
@@ -79,41 +69,4 @@ export function assertSupportedDuration(duration) {
   if (duration > MAX_VIDEO_DURATION_SECONDS + DURATION_TOLERANCE_SECONDS) {
     throw new PermanentTranscodeError(`Video is ${Math.round(duration)} seconds long — the limit is ${MAX_VIDEO_DURATION_SECONDS} seconds`);
   }
-}
-
-// Picks one random timestamp per 10s window across the whole video, e.g. 60s -> 6,
-// 25s -> 3 (the last window is cut short).
-export function pickFrameTimestamps(duration) {
-  const lastUsable = duration - END_MARGIN_SECONDS;
-  const timestamps = [];
-
-  for (let start = 0; start < lastUsable; start += SEGMENT_SECONDS) {
-    const end = Math.min(start + SEGMENT_SECONDS, lastUsable);
-    timestamps.push(start + Math.random() * (end - start));
-  }
-
-  return timestamps;
-}
-
-// Extracts one JPEG per timestamp into outputDir as frame_1.jpg, frame_2.jpg, ...
-// Resolves with [{ index, timestamp, path }] in order.
-export async function extractFrames(inputPath, outputDir, timestamps) {
-  const frames = [];
-
-  for (const [i, timestamp] of timestamps.entries()) {
-    const index = i + 1;
-    const framePath = path.join(outputDir, `frame_${index}.jpg`);
-
-    // -ss before -i seeks fast; ffmpeg still decodes up to the exact timestamp.
-    await spawnFfmpeg(['-y', '-ss', timestamp.toFixed(3), '-i', inputPath, '-frames:v', '1', '-q:v', '2', framePath]);
-
-    // ffmpeg can exit 0 without writing anything if the seek lands past the last frame.
-    await fs.access(framePath).catch(() => {
-      throw new Error(`Frame ${index} at ${timestamp.toFixed(3)}s was not written`);
-    });
-
-    frames.push({ index, timestamp, path: framePath });
-  }
-
-  return frames;
 }
