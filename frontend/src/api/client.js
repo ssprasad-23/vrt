@@ -1,21 +1,20 @@
 import axios from 'axios';
 import {Platform} from 'react-native';
-import {
-  AUTH_API_URL_IOS,
-  AUTH_API_URL_ANDROID,
-  VIDEO_API_URL_IOS,
-  VIDEO_API_URL_ANDROID,
-} from '@env';
+import {API_URL_IOS, API_URL_ANDROID} from '@env';
 import {getAccessToken, setAccessTokenExternal} from '../context/AuthContext';
 
-const AUTH_BASE_URL =
-  Platform.OS === 'ios' ? AUTH_API_URL_IOS : AUTH_API_URL_ANDROID;
-const VIDEO_BASE_URL =
-  Platform.OS === 'ios' ? VIDEO_API_URL_IOS : VIDEO_API_URL_ANDROID;
+// Every backend call goes through the API gateway, which routes by path prefix:
+// /auth/* -> auth, /videos/* -> upload, /feed -> feed.
+const API_BASE_URL = Platform.OS === 'ios' ? API_URL_IOS : API_URL_ANDROID;
 
 // Endpoints that must never trigger a refresh-and-retry (they either don't
 // need an access token or are the refresh call itself).
-const AUTH_EXEMPT_PATHS = ['/refreshToken', '/userLogin', '/userSignUp', '/logout'];
+const AUTH_EXEMPT_PATHS = [
+  '/auth/refreshToken',
+  '/auth/userLogin',
+  '/auth/userSignUp',
+  '/auth/logout',
+];
 
 let refreshPromise = null;
 
@@ -25,7 +24,7 @@ let refreshPromise = null;
 const refreshAccessToken = () => {
   if (!refreshPromise) {
     refreshPromise = axios
-      .post(`${AUTH_BASE_URL}/refreshToken`, null, {withCredentials: true})
+      .post(`${API_BASE_URL}/auth/refreshToken`, null, {withCredentials: true})
       .then(res => {
         const newToken = res.data.data.accessToken;
         setAccessTokenExternal(newToken);
@@ -43,9 +42,9 @@ const refreshAccessToken = () => {
   return refreshPromise;
 };
 
-const createClient = baseURL => {
+const createClient = () => {
   const client = axios.create({
-    baseURL,
+    baseURL: API_BASE_URL,
     timeout: 10000,
     withCredentials: true,
   });
@@ -91,7 +90,6 @@ const createClient = baseURL => {
   return client;
 };
 
-const apiClient = createClient(AUTH_BASE_URL);
-export const videoClient = createClient(VIDEO_BASE_URL);
+const apiClient = createClient();
 
 export default apiClient;

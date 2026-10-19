@@ -10,6 +10,6 @@ export function authenticate(req, res, next) {
   const userId = req.headers['x-user-id'];
   if (!userId) return res.status(401).json({ message: 'No user identity provided' });
 
-  req.user = { userId: Number(userId), email: req.headers['x-user-email'] };
+  req.user = { userId: Number(userId) };
   next();
 }

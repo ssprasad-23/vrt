@@ -6,6 +6,5 @@ export function attachProxyHeaders(proxyReq, req) {
 
   if (req.user) {
     proxyReq.setHeader('x-user-id', String(req.user.userId));
-    if (req.user.email) proxyReq.setHeader('x-user-email', req.user.email);
   }
 }

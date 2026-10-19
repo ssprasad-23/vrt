@@ -19,7 +19,7 @@ Express 5 REST API using ES modules (`"type": "module"` — use `import`/`export
 
 **Startup sequence** (`server.js`): verifies DB connectivity with `SELECT 1`, calls `initDb()` (`src/data/createTable.js`) to create the `videos` table if absent, then starts the HTTP server. A centralized error-handling middleware (last `app.use` in `server.js`) catches anything passed to `next(err)` from controllers and responds with a generic 500.
 
-**Auth**: this service no longer verifies JWTs at all — the `gateway` service does that once, up front, and forwards the caller's identity as trusted headers. `src/middleware/authenticate.js` just checks `x-gateway-secret` matches `GATEWAY_SECRET` (must equal the gateway's value) and reads `req.user` off `x-user-id`/`x-user-email` — no `jsonwebtoken` dependency, no `ACCESS_TOKEN_SECRET` here anymore. See `gateway/CLAUDE.md` for the full auth model.
+**Auth**: this service no longer verifies JWTs at all — the `gateway` service does that once, up front, and forwards the caller's identity as trusted headers. `src/middleware/authenticate.js` just checks `x-gateway-secret` matches `GATEWAY_SECRET` (must equal the gateway's value) and reads `req.user = { userId }` off `x-user-id` — no `jsonwebtoken` dependency, no `ACCESS_TOKEN_SECRET` here anymore. See `gateway/CLAUDE.md` for the full auth model.
 
 **Database** (`src/config/configDB.js`): exports a single `pg.Pool` instance, own database — not shared with the auth service (no cross-service foreign keys; `videos.user_id` is a plain integer). Configured via `.env`: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, plus `PORT` for the HTTP server.
 
@@ -62,7 +62,7 @@ Full step-by-step tables live in `UPLOAD_FLOW.md`.
 - S3 key generation + presigned URL generation → `src/utility/s3.js`
 - SQS client config → `src/config/sqsConfig.js`; sending transcode jobs → `src/sqs/outgoing.js`; receiving finished encodes → `src/sqs/incoming.js`
 - Table creation on startup → `src/data/createTable.js`, SQL in `src/data/videosTable.sql`
-- Trust-the-gateway auth middleware (checks `x-gateway-secret`, reads identity off `x-user-id`/`x-user-email`) → `src/middleware/authenticate.js`
+- Trust-the-gateway auth middleware (checks `x-gateway-secret`, reads identity off `x-user-id`) → `src/middleware/authenticate.js`
 - Server bootstrap, DB health check, global error handler → `server.js`
 
 ## Local dev / run instructions

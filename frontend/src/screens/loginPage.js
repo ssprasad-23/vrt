@@ -24,7 +24,7 @@ const LoginPage = ({navigation}) => {
 
     setLoading(true);
     try {
-      const res = await apiClient.post('/userLogin', {
+      const res = await apiClient.post('/auth/userLogin', {
         username: username.trim(),
         password,
       });
