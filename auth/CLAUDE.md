@@ -37,9 +37,9 @@ Single-service repo — no microservices split yet.
 
 **Signup** (`POST /userSignUp`): `authRouters.js` → `createUser` (`authController.js`) → `createUserService` (`authModels.js`) → `INSERT INTO users` → `201` with the created row, or `409` on unique-violation (`23505`).
 
-**Login** (`POST /userLogin`): `loginUser` → `loginUserService` looks up the row by username/password → on match, `src/utility/tokens.js` mints an access token (15m default) and a refresh token (7d default) → refresh token is persisted via `storeRefreshToken` (`refresh_tokens` table) and set as an `httpOnly` cookie → access token returned in the JSON body.
+**Login** (`POST /userLogin`): `loginUser` → `loginUserService` looks up the row by username/password → on match, `src/utility/tokens.js` mints an access token (15m default; payload `{ sub: <user_id> }` only, HS256, `iss: 'vrt-auth'`, `aud: 'vrt-api'` — the gateway verifies all three) and a refresh token (32 random bytes, not a JWT) → only its SHA-256 hash is persisted via `storeRefreshToken` (`refresh_tokens` table, new `family_id` per login) and the raw token is set as an `httpOnly` cookie (`REFRESH_TOKEN_TTL_DAYS`, default 30) → access token returned in the JSON body.
 
-**Refresh** (`POST /refreshToken`): reads the refresh token cookie → `findRefreshToken` checks it's still in the DB and unexpired → `verifyRefreshToken` checks the JWT itself → `findUserById` reloads the user → a **new access token only** is issued (refresh token is not rotated).
+**Refresh** (`POST /refreshToken`): reads the refresh token cookie → `rotateRefreshToken` (one transaction) marks it used and stores a new token in the same family → the new token replaces the cookie with a fresh 30-day expiry (sliding) and a new access token is returned. Refresh tokens are single-use: presenting an already-used one is treated as theft and `deleteRefreshTokenFamily` revokes that login session. Logout also deletes the whole family. `server.js`'s `initDb()` recreates an old-format `refresh_tokens` table (raw `token` column) on boot, logging everyone out once.
 
 Full step-by-step tables (including logout) live in `AUTH_FLOW.md`.
 
@@ -54,13 +54,13 @@ None — this repo has no message queue or pub/sub broker (no Kafka/RabbitMQ/Red
 - DB queries (users + refresh tokens) → `src/models/authModels.js`
 - DB connection pool → `src/config/configDB.js`
 - Table creation on startup → `src/data/createTable.js`, SQL in `src/data/userTable.sql` and `src/data/refreshTokenTable.sql`
-- JWT signing/verification → `src/utility/tokens.js`
+- Access-token JWT signing/verification, refresh-token generation/hashing, TTLs → `src/utility/tokens.js`
 - Bearer-token auth middleware (not yet wired to any route) → `src/middlewear/authenticate.js`
 - Server bootstrap, DB health check, global error handler → `server.js`
 
 ## Local dev / run instructions
 
-Requires a running PostgreSQL instance and a `.env` file with: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET` (optionally `ACCESS_TOKEN_EXPIRY`, `REFRESH_TOKEN_EXPIRY` — default to `15m`/`7d`). Then:
+Requires a running PostgreSQL instance and a `.env` file with: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `ACCESS_TOKEN_SECRET` (optionally `ACCESS_TOKEN_EXPIRY`, default `15m`, and `REFRESH_TOKEN_TTL_DAYS`, default `30`; refresh tokens are random, so there's no refresh secret). Then:
 
 ```bash
 npm start        # run server

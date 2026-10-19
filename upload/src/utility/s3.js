@@ -14,9 +14,6 @@ const s3 = new S3Client({
 
 const UPLOAD_URL_EXPIRY_SECONDS = Number(process.env.UPLOAD_URL_EXPIRY_SECONDS) || 900; // 15 min
 
-// access token uses { userId: user.user_id, email: user.email }
-
-
 //Builds the S3 object key for a video's original upload, one folder per video
 //(same layout as the media bucket's {videoId}/{videoId}_AV1_{N}_{size}MB.mp4): original bucket > {videoId}/{videoId}_original.mp4.
 //videoId repeated in the filename so the file stays identifiable if copied out of its folder.

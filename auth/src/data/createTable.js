@@ -34,11 +34,32 @@ export default async function initDb() {
   `);
 
   if (!refreshTableExists.rows[0].exists) {
-    const sqlFile = path.join(__dirname, "../data/refreshTokenTable.sql");
-    const createTableSQL = fs.readFileSync(sqlFile, "utf8");
-    await db.query(createTableSQL);
+    await createRefreshTokensTable();
     log("Refresh tokens table created");
+  } else if (!(await refreshTableHasHashes())) {
+    // Tables from before hashed, rotating refresh tokens stored the raw JWT in a `token`
+    // column. Those tokens can't be converted (and are no longer accepted anyway), so the
+    // table is recreated — everyone logs in again once.
+    await db.query("DROP TABLE refresh_tokens");
+    await createRefreshTokensTable();
+    log("Refresh tokens table recreated for hashed, rotating tokens (existing sessions logged out)");
   } else {
     log("Refresh tokens table already exists");
   }
+}
+
+async function createRefreshTokensTable() {
+  const sqlFile = path.join(__dirname, "../data/refreshTokenTable.sql");
+  const createTableSQL = fs.readFileSync(sqlFile, "utf8");
+  await db.query(createTableSQL);
+}
+
+async function refreshTableHasHashes() {
+  const result = await db.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'refresh_tokens' AND column_name = 'token_hash'
+    );
+  `);
+  return result.rows[0].exists;
 }
