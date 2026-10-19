@@ -13,7 +13,6 @@ import {
     MEDIA_BUCKET,
     ORIGINAL_BUCKET,
     buildEncodedKey,
-    buildFrameKey,
     uploadFileToS3,
 } from '../utility/s3.js';
 import { downloadFromS3 } from '../utility/download.js';
@@ -22,9 +21,8 @@ import {
     probeDuration,
     probeDimensions,
     assertSupportedDuration,
-    pickFrameTimestamps,
-    extractFrames,
-} from '../utility/frameExtraction.js';
+} from '../utility/probe.js';
+import { extractAndUploadFrames } from './frameExtraction.js';
 import { ENCODING_OUTPUTS } from '../config/encodingOutputs.js';
 import { logError } from "../utility/logger.js";
 
@@ -66,7 +64,7 @@ export function missingOutputs(job) {
 // {videoId}/{videoId}_{codec}_{N}_{size}MB.{container}, saved in transcode_jobs.outputs, and
 // passed to onOutput(name, key, sizeBytes) straight away — so the fast H.264 encode reaches the feed
 // without waiting for AV1. Outputs already saved by an earlier attempt are skipped.
-// Any step failing (including a video over 120s) fails the job; a retry resumes from the
+// Any step failing (including a video over 60s) fails the job; a retry resumes from the
 // first missing output. Assumes a transcode_jobs row already exists (see ensureTranscodeJob).
 export async function runTranscodeJob(videoId, onOutput = async () => {}) {
     const job = await findTranscodeJobById(videoId)
@@ -97,10 +95,7 @@ export async function runTranscodeJob(videoId, onOutput = async () => {}) {
         const duration = await probeDuration(inputPath);
         assertSupportedDuration(duration);
         if (Object.keys(job.outputs || {}).length === 0) {
-            const frames = await extractFrames(inputPath, jobDir, pickFrameTimestamps(duration));
-            for (const frame of frames) {
-                await uploadFileToS3(MEDIA_BUCKET, buildFrameKey(videoId, frame.index), frame.path, 'image/jpeg');
-            }
+            await extractAndUploadFrames(videoId, inputPath, jobDir, duration);
         }
 
         const encodedBytes = {}

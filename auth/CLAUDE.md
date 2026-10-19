@@ -35,7 +35,7 @@ Single-service repo — no microservices split yet.
 
 ## Data flow for key use cases
 
-**Signup** (`POST /userSignUp`): `authRouters.js` → `createUser` (`authController.js`) → `createUserService` (`authModels.js`) → `INSERT INTO users` → `201` with the created row, or `409` on unique-violation (`23505`).
+**Signup** (`POST /userSignUp`): `authRouters.js` → `createUser` (`authController.js`) → `validateSignup` (`src/utility/validation.js`: required fields, username 3-30 of `[A-Za-z0-9_.]`, email format, password 8 chars-72 bytes, real `YYYY-MM-DD` date and age ≥ 13, optional `+`digits phone after stripping spaces/dashes) → `400` with the first problem → `createUserService` (`authModels.js`, email lowercased) → `INSERT INTO users` → `201` with the created row, or `409` on unique-violation (`23505`) with a message picked by index name (`users_username_lower_key` / `users_email_lower_key` — case-insensitive unique indexes created on every boot by `initDb()`). Login also validates (`400`) and looks the username up case-insensitively.
 
 **Login** (`POST /userLogin`): `loginUser` → `loginUserService` looks up the row by username/password → on match, `src/utility/tokens.js` mints an access token (15m default; payload `{ sub: <user_id> }` only, HS256, `iss: 'vrt-auth'`, `aud: 'vrt-api'` — the gateway verifies all three) and a refresh token (32 random bytes, not a JWT) → only its SHA-256 hash is persisted via `storeRefreshToken` (`refresh_tokens` table, new `family_id` per login) and the raw token is set as an `httpOnly` cookie (`REFRESH_TOKEN_TTL_DAYS`, default 30) → access token returned in the JSON body.
 
@@ -71,4 +71,4 @@ npm run dev      # run server with auto-reload (node --watch)
 
 ## Known issues
 
-- None currently tracked. Passwords are hashed with `bcrypt` (`SALT_ROUNDS = 10`) in `createUserService`/`loginUserService` (`src/models/authModels.js`).
+- No rate limiting on login/signup (plan: WAF on the load balancer). Passwords are hashed with `bcrypt` (`SALT_ROUNDS = 10`) in `createUserService`/`loginUserService` (`src/models/authModels.js`).

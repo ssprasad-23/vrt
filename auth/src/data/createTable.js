@@ -24,6 +24,7 @@ export default async function initDb() {
   } else {
     log("Users table already exists");
   }
+  await ensureUniqueUsers();
 
   const refreshTableExists = await db.query(`
     SELECT EXISTS (
@@ -62,4 +63,12 @@ async function refreshTableHasHashes() {
     );
   `);
   return result.rows[0].exists;
+}
+
+// One account per username and per email, ignoring case ("Bob" and "bob" clash). Safe to run on
+// every boot. Fails startup if existing rows already clash — those need resolving by hand first.
+// The index names are what authController.js maps to a 409 message.
+async function ensureUniqueUsers() {
+  await db.query("CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_key ON users (lower(username))");
+  await db.query("CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email))");
 }

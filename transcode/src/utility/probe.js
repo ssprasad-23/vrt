@@ -1,0 +1,72 @@
+import { spawn } from 'child_process';
+import { PermanentTranscodeError } from './errors.js';
+
+const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
+
+// Only videos up to 60s are supported (keep in sync with upload/src/config/uploadLimits.js and
+// frontend/src/api/uploadLimits.js). Containers often report a hair over the nominal length (e.g. 60.02s), so allow a small tolerance before rejecting.
+export const MAX_VIDEO_DURATION_SECONDS = 60;
+const DURATION_TOLERANCE_SECONDS = 1;
+
+// Runs ffprobe and resolves with its stdout, rejecting with stderr on a non-zero exit.
+function runFfprobe(args) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(FFPROBE_PATH, args);
+
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to start ffprobe (is it installed and on PATH?): ${err.message}`));
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(`ffprobe exited with code ${code}: ${stderr.slice(-2000)}`));
+      }
+    });
+  });
+}
+
+// Returns the source video's duration in seconds, via ffprobe.
+// It's the first thing run on an upload, so a file ffprobe can't read is permanently bad (not a
+// video, or corrupt) — unless ffprobe itself is missing, which is a server problem worth retrying.
+export async function probeDuration(inputPath) {
+  let stdout;
+  try {
+    stdout = await runFfprobe(['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', inputPath]);
+  } catch (err) {
+    if (err.message.startsWith('Failed to start ffprobe')) throw err;
+    throw new PermanentTranscodeError("This file isn't a video we can read", { cause: err });
+  }
+  const duration = parseFloat(stdout);
+  if (!Number.isFinite(duration)) {
+    throw new PermanentTranscodeError("This file isn't a video we can read");
+  }
+  return duration;
+}
+
+// Returns { width, height } of the first video stream, via ffprobe.
+export async function probeDimensions(inputPath) {
+  const stdout = await runFfprobe(['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', inputPath]);
+  const [width, height] = stdout.trim().split('x').map(Number);
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    throw new Error(`ffprobe could not read video dimensions: ${stdout.slice(-2000)}`);
+  }
+  return { width, height };
+}
+
+// Throws if the video is longer than the supported maximum.
+export function assertSupportedDuration(duration) {
+  if (duration > MAX_VIDEO_DURATION_SECONDS + DURATION_TOLERANCE_SECONDS) {
+    throw new PermanentTranscodeError(`Video is ${Math.round(duration)} seconds long — the limit is ${MAX_VIDEO_DURATION_SECONDS} seconds`);
+  }
+}

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import apiClient from '../api/client';
 import {useAuth} from '../context/AuthContext';
+import {getErrorMessage} from '../api/errors';
 
 const LoginPage = ({navigation}) => {
   const [username, setUsername] = useState('');
@@ -29,14 +30,6 @@ const LoginPage = ({navigation}) => {
         password,
       });
 
-      if (res.data?.errors) {
-        throw new Error(res.data.errors.map(e => e.message).join('; '));
-      }
-
-      console.log(
-        `[${new Date().toLocaleTimeString()}] access token received from login:`,
-        res.data.data.accessToken,
-      );
       setAccessToken(res.data.data.accessToken);
 
       navigation.reset({
@@ -44,8 +37,7 @@ const LoginPage = ({navigation}) => {
         routes: [{name: 'Home'}],
       });
     } catch (err) {
-      console.error(err);
-      Alert.alert('Login failed', err?.message || 'Network error');
+      Alert.alert('Login failed', getErrorMessage(err));
     } finally {
       setLoading(false);
     }
