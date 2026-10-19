@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import db from "./src/config/configDB.js";
 import initDb from "./src/data/createTable.js";
-import { startTranscodeWorker } from "./src/worker/transcodeWorker.js";
+import { startTranscodeJobConsumer } from "./src/sqs/incoming.js";
 import { log, logError } from "./src/utility/logger.js";
 
 dotenv.config();
@@ -17,7 +17,7 @@ dotenv.config();
     await initDb();
 
     // Start the SQS worker (polls { videoId, key } messages off the transcode queue) AFTER DB is ready
-    startTranscodeWorker();
+    startTranscodeJobConsumer();
   } catch (err) {
     logError("Startup failed:", err);
     process.exit(1);

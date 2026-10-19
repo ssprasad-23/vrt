@@ -1,6 +1,6 @@
 import { SendMessageCommand } from '@aws-sdk/client-sqs';
 import { sqsClient, TRANSCODE_COMPLETED_QUEUE_URL } from '../config/sqsConfig.js';
-import { log } from './logger.js';
+import { log } from '../utility/logger.js';
 
 // Tells the upload service one of a video's outputs finished encoding — sent once per output
 // (H.264 first, then AV1). Message body is { videoId, codec, outputKey, sizeMb }: codec is the

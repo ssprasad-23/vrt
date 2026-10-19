@@ -1,6 +1,6 @@
 import { SendMessageCommand } from '@aws-sdk/client-sqs';
 import { sqsClient, TRANSCODE_QUEUE_URL } from '../config/sqsConfig.js';
-import { log } from './logger.js';
+import { log } from '../utility/logger.js';
 
 // Queues a transcode job for an uploaded video. Message body is { videoId, key } — key is
 // the original's S3 object key; the transcode worker downloads it from the original bucket itself.

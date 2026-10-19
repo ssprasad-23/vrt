@@ -1,7 +1,7 @@
 import { createVideoService, findVideoById, markVideoUploaded } from "../models/videoModels.js"
 import { buildVideoKey, generateUploadUrl, getUploadedSize } from '../utility/s3.js';
 import { generateVideoId } from '../utility/videoId.js';
-import { sendTranscodeJob } from '../utility/sqs.js';
+import { sendTranscodeJob } from '../sqs/outgoing.js';
 
 //Standardise response function
 const handleResponse = (res, status, message, data=null) => {
