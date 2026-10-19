@@ -19,7 +19,7 @@ Express 5 REST API using ES modules (`"type": "module"` — use `import`/`export
 
 **Startup sequence** (`server.js`): verifies DB connectivity with `SELECT 1`, calls `initDb()` (`src/data/createTable.js`) to create the `videos` table if absent, then starts the HTTP server. A centralized error-handling middleware (last `app.use` in `server.js`) catches anything passed to `next(err)` from controllers and responds with a generic 500.
 
-**Auth**: this service no longer verifies JWTs at all — the `gateway` service does that once, up front, and forwards the caller's identity as trusted headers. `src/middleware/authenticate.js` just checks `x-gateway-secret` matches `GATEWAY_SECRET` (must equal the gateway's value) and reads `req.user` off `x-user-id`/`x-user-email` — no `jsonwebtoken` dependency, no `ACCESS_TOKEN_SECRET` here anymore. See `gateway/CLAUDE.md` for the full auth model.
+**Auth**: this service no longer verifies JWTs at all — the `gateway` service does that once, up front, and forwards the caller's identity as trusted headers. `src/middleware/authenticate.js` just checks `x-gateway-secret` matches `GATEWAY_SECRET` (must equal the gateway's value) and reads `req.user = { userId }` off `x-user-id` — no `jsonwebtoken` dependency, no `ACCESS_TOKEN_SECRET` here anymore. See `gateway/CLAUDE.md` for the full auth model.
 
 **Database** (`src/config/configDB.js`): exports a single `pg.Pool` instance, own database — not shared with the auth service (no cross-service foreign keys; `videos.user_id` is a plain integer). Configured via `.env`: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, plus `PORT` for the HTTP server.
 
@@ -43,7 +43,7 @@ Single-service repo — no microservices split within this repo, but it depends 
 
 **Client uploads directly to S3** using `uploadUrl` — bypasses this server entirely.
 
-**Complete upload** (`POST /videos/:id/complete`, protected): `completeUpload` → `findVideoById` → `404` if missing or not owned by the caller, `409` if not `pending` → `400` if the object isn't in the bucket yet (`getUploadedSize`, HeadObject) → `sendTranscodeJob(videoId, original_s3_key)` (`src/utility/sqs.js`) queues `{ videoId, key }` on the transcode SQS queue → `markVideoUploaded` (`status='uploaded'`, `uploaded_at=now()`) → `200` with the updated row. The send happens *before* the status update on purpose: if SQS is down the row stays `pending` and the client can just retry `/complete` (a duplicate message from a retry is harmless — the transcode worker skips completed jobs).
+**Complete upload** (`POST /videos/:id/complete`, protected): `completeUpload` → `findVideoById` → `404` if missing or not owned by the caller, `409` if not `pending` → `400` if the object isn't in the bucket yet (`getUploadedSize`, HeadObject) → `sendTranscodeJob(videoId, original_s3_key)` (`src/sqs/outgoing.js`) queues `{ videoId, key }` on the transcode SQS queue → `markVideoUploaded` (`status='uploaded'`, `uploaded_at=now()`) → `200` with the updated row. The send happens *before* the status update on purpose: if SQS is down the row stays `pending` and the client can just retry `/complete` (a duplicate message from a retry is harmless — the transcode worker skips completed jobs).
 
 Full step-by-step tables live in `UPLOAD_FLOW.md`.
 
@@ -51,7 +51,7 @@ Full step-by-step tables live in `UPLOAD_FLOW.md`.
 
 **Produces** to the transcode SQS queue (`TRANSCODE_QUEUE_URL`), consumed by the `transcode` service's worker: `{ "videoId": "<12-char id>", "key": "<videoId>/<videoId>_original.mp4" }` — `key` is the object key in `S3_BUCKET_NAME`. Sent once per successful `/complete`.
 
-**Consumes** `{ "videoId", "codec", "outputKey" }` from `TRANSCODE_COMPLETED_QUEUE_URL` (ElasticMQ queue `av1-transcode-completed`), sent by the transcode worker once per output as each finishes (`codec` `h264` first, then `av1`). `src/worker/transcodeCompletedWorker.js` (started in `server.js` after `initDb()`) saves `outputKey` in that codec's column via `setEncodedKey` (`videoModels.js`), which maps codec → column through the `ENCODED_KEY_COLUMNS` whitelist so message content never reaches the SQL. An unknown codec is logged and acked; a message with no `codec` (old format) is treated as `av1`. SQS client in `src/config/sqsConfig.js` (`SQS_ENDPOINT` points it at ElasticMQ locally).
+**Consumes** `{ "videoId", "codec", "outputKey" }` from `TRANSCODE_COMPLETED_QUEUE_URL` (ElasticMQ queue `av1-transcode-completed`), sent by the transcode worker once per output as each finishes (`codec` `h264` first, then `av1`). `src/sqs/incoming.js` (started in `server.js` after `initDb()`) saves `outputKey` in that codec's column via `setEncodedKey` (`videoModels.js`), which maps codec → column through the `ENCODED_KEY_COLUMNS` whitelist so message content never reaches the SQL. An unknown codec is logged and acked; a message with no `codec` (old format) is treated as `av1`. SQS client in `src/config/sqsConfig.js` (`SQS_ENDPOINT` points it at ElasticMQ locally).
 
 ## Where things live
 
@@ -60,9 +60,9 @@ Full step-by-step tables live in `UPLOAD_FLOW.md`.
 - DB queries (videos) → `src/models/videoModels.js`
 - DB connection pool → `src/config/configDB.js`
 - S3 key generation + presigned URL generation → `src/utility/s3.js`
-- SQS client config → `src/config/sqsConfig.js`; sending transcode jobs → `src/utility/sqs.js`; receiving finished encodes → `src/worker/transcodeCompletedWorker.js`
+- SQS client config → `src/config/sqsConfig.js`; sending transcode jobs → `src/sqs/outgoing.js`; receiving finished encodes → `src/sqs/incoming.js`
 - Table creation on startup → `src/data/createTable.js`, SQL in `src/data/videosTable.sql`
-- Trust-the-gateway auth middleware (checks `x-gateway-secret`, reads identity off `x-user-id`/`x-user-email`) → `src/middleware/authenticate.js`
+- Trust-the-gateway auth middleware (checks `x-gateway-secret`, reads identity off `x-user-id`) → `src/middleware/authenticate.js`
 - Server bootstrap, DB health check, global error handler → `server.js`
 
 ## Local dev / run instructions

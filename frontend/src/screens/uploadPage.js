@@ -12,7 +12,7 @@ import {Picker} from '@react-native-picker/picker';
 import {launchImageLibrary} from 'react-native-image-picker';
 import Video from 'react-native-video';
 import styles from './uploadStyles';
-import {videoClient} from '../api/client';
+import apiClient from '../api/client';
 
 const categories = ['Videos'];
 
@@ -41,7 +41,7 @@ const UploadPage = ({navigation}) => {
 
     setUploading(true);
     try {
-      const initRes = await videoClient.post('/videos/upload-init', {
+      const initRes = await apiClient.post('/videos/upload-init', {
         description,
         category,
       });
@@ -60,7 +60,7 @@ const UploadPage = ({navigation}) => {
         throw new Error(`Upload to storage failed (${putRes.status})`);
       }
 
-      await videoClient.post(`/videos/${videoId}/complete`);
+      await apiClient.post(`/videos/${videoId}/complete`);
 
       Alert.alert('Success', 'Your video has been uploaded.', [
         {text: 'OK', onPress: () => navigation.goBack()},

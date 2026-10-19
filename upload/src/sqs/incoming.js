@@ -36,7 +36,7 @@ async function processMessage(message) {
   log(`${videoId} SQS received: ${codec} completion (${sizeMb}MB)`);
 }
 
-export function startTranscodeCompletedWorker() {
+export function startTranscodeCompletedConsumer() {
   if (!TRANSCODE_COMPLETED_QUEUE_URL) {
     throw new Error('TRANSCODE_COMPLETED_QUEUE_URL not set — cannot receive finished encodes from the transcode service');
   }

@@ -214,7 +214,7 @@ const SignupPage = ({ navigation }) => {
         country: selectedCountry.name,
       }
 
-      const res = await apiClient.post('/userSignUp', payload);
+      const res = await apiClient.post('/auth/userSignUp', payload);
 
       if (res.data?.errors) {
         throw new Error(res.data.errors.map(e => e.message).join('; '));

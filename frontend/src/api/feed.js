@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {MEDIA_URL_IOS, MEDIA_URL_ANDROID} from '@env';
-import {videoClient} from './client';
+import apiClient from './client';
 
 const MEDIA_BASE_URL = Platform.OS === 'ios' ? MEDIA_URL_IOS : MEDIA_URL_ANDROID;
 
@@ -12,7 +12,7 @@ export const mediaUrl = key => `${MEDIA_BASE_URL}/${key}`;
 // One page of the feed via the gateway (GET /feed → feed service).
 // Pass the previous page's nextCursor to get the next one; nextCursor is null at the end.
 export const fetchFeed = async (cursor = null) => {
-  const res = await videoClient.get('/feed', {
+  const res = await apiClient.get('/feed', {
     params: {limit: FEED_PAGE_SIZE, ...(cursor ? {cursor} : {})},
   });
   return res.data.data; // { videos, nextCursor }

@@ -81,7 +81,7 @@ const Home = ({navigation}) => {
   const handleLogout = async () => {
     setMenuVisible(false);
     try {
-      await apiClient.post('/logout');
+      await apiClient.post('/auth/logout');
       console.log(`[logged out successfully ${new Date().toLocaleTimeString()}]`);
     } catch (err) {
       console.error(err);

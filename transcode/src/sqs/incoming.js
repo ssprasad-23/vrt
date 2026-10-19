@@ -4,7 +4,7 @@ import { ensureTranscodeJob, runTranscodeJob, missingOutputs } from '../services
 import { markTranscodeCompleted } from '../models/transcodeModels.js';
 import { log, logError } from '../utility/logger.js';
 import { MEDIA_BUCKET, ORIGINAL_BUCKET, getObjectSize } from '../utility/s3.js';
-import { sendTranscodeCompleted } from '../utility/sqs.js';
+import { sendTranscodeCompleted } from './outgoing.js';
 
 // Lease held on an in-flight message. ffmpeg encodes can run for minutes, so the
 // consumer extends it every SQS_HEARTBEAT_INTERVAL seconds (ChangeMessageVisibility)
@@ -81,7 +81,7 @@ async function processMessage(message) {
   }
 }
 
-export function startTranscodeWorker() {
+export function startTranscodeJobConsumer() {
   if (!TRANSCODE_QUEUE_URL) {
     throw new Error('TRANSCODE_QUEUE_URL not set — the SQS worker is the only way this service receives jobs');
   }

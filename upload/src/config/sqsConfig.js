@@ -16,5 +16,5 @@ export const sqsClient = new SQSClient({
 export const TRANSCODE_QUEUE_URL = process.env.TRANSCODE_QUEUE_URL;
 
 // Full URL of the queue the transcode service reports finished encodes to, as { videoId, codec, outputKey }
-// (one per output). src/worker/transcodeCompletedWorker.js polls it and saves outputKey in that codec's column.
+// (one per output). src/sqs/incoming.js polls it and saves outputKey in that codec's column.
 export const TRANSCODE_COMPLETED_QUEUE_URL = process.env.TRANSCODE_COMPLETED_QUEUE_URL;

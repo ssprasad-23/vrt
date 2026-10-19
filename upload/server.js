@@ -4,7 +4,7 @@ import db from "./src/config/configDB.js";
 import initDb from "./src/data/createTable.js";
 import videoRouter from "./src/routes/videoRouters.js";
 import { log, logError } from "./src/utility/logger.js";
-import { startTranscodeCompletedWorker } from "./src/worker/transcodeCompletedWorker.js";
+import { startTranscodeCompletedConsumer } from "./src/sqs/incoming.js";
 
 dotenv.config();
 
@@ -31,7 +31,7 @@ app.use((err, req, res, next) => {
     await initDb();
 
     // Listen for finished encodes (saves transcoded_s3_key) AFTER DB is ready
-    startTranscodeCompletedWorker();
+    startTranscodeCompletedConsumer();
 
     // Start server AFTER DB is ready
     app.listen(PORT, () => {

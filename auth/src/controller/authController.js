@@ -1,14 +1,19 @@
+import crypto from "crypto"
 import {
     createUserService,
     loginUserService,
     storeRefreshToken,
+    rotateRefreshToken,
     findRefreshToken,
-    deleteRefreshToken,
+    deleteRefreshTokenFamily,
+    deleteExpiredRefreshTokens,
     findUserById } from "../models/authModels.js"
 import { generateAccessToken,
          generateRefreshToken,
-         verifyRefreshToken } from '../utility/tokens.js';
-import { log } from "../utility/logger.js"
+         hashRefreshToken,
+         refreshTokenExpiresAt,
+         REFRESH_TOKEN_MAX_AGE_MS } from '../utility/tokens.js';
+import { log, logError } from "../utility/logger.js"
 
 
 //Standardise response function
@@ -35,8 +40,20 @@ export const createUser = async (req, res, next) => {
     }
 }
 
-// 7 days in ms — keep in sync with the REFRESH_TOKEN_EXPIRY default in tokens.js
-const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_COOKIE = 'refreshToken'
+const REFRESH_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+}
+
+const setRefreshCookie = (res, token) => {
+    res.cookie(REFRESH_COOKIE, token, { ...REFRESH_COOKIE_OPTIONS, maxAge: REFRESH_TOKEN_MAX_AGE_MS })
+}
+
+const clearRefreshCookie = (res) => {
+    res.clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_OPTIONS)
+}
 
 //login
 export const loginUser = async (req, res, next) => {
@@ -47,18 +64,14 @@ export const loginUser = async (req, res, next) => {
             return handleResponse(res, 401, "Invalid username or password")
         }
 
-        const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
+        // housekeeping: drop rows nobody can use any more
+        await deleteExpiredRefreshTokens()
 
-        const expiresAt = new Date(Date.now() + REFRESH_TOKEN_MAX_AGE);
-        await storeRefreshToken(user.user_id, refreshToken, expiresAt);
-
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: REFRESH_TOKEN_MAX_AGE,
-        });
+        const accessToken = generateAccessToken(user)
+        // a new login starts a new family — the chain of tokens this device will rotate through
+        const refreshToken = generateRefreshToken()
+        await storeRefreshToken(user.user_id, hashRefreshToken(refreshToken), crypto.randomUUID(), refreshTokenExpiresAt())
+        setRefreshCookie(res, refreshToken)
 
         handleResponse(res, 200, 'Login successful', { accessToken })
     } catch (err) {
@@ -66,47 +79,55 @@ export const loginUser = async (req, res, next) => {
     }
 }
 
-// refresh token
+// refresh token — rotates on every call: the presented token is marked used and a new one
+// (fresh 30-day expiry) replaces it in the cookie.
 export const refreshTokenController = async (req, res, next) => {
-    const token = req.cookies?.refreshToken
+    const token = req.cookies?.[REFRESH_COOKIE]
     if (!token) {
         return handleResponse(res, 401, "No refresh token provided")
     }
     try {
-        const stored = await findRefreshToken(token)
-        if (!stored || new Date(stored.expires_at) < new Date()) {
+        const tokenHash = hashRefreshToken(token)
+        const newToken = generateRefreshToken()
+        const old = await rotateRefreshToken(tokenHash, hashRefreshToken(newToken), refreshTokenExpiresAt())
+
+        if (!old) {
+            // An already-used token coming back means it was copied: either the thief or the real
+            // user is replaying it. Revoke that whole login session so neither can keep refreshing.
+            const stored = await findRefreshToken(tokenHash)
+            if (stored?.used_at) {
+                await deleteRefreshTokenFamily(stored.family_id)
+                logError(`Refresh token reuse detected for user ${stored.user_id} — session revoked`)
+            }
+            clearRefreshCookie(res)
             return handleResponse(res, 403, "Invalid or expired refresh token")
         }
 
-        const payload = verifyRefreshToken(token)
-        const user = await findUserById(payload.userId)
+        const user = await findUserById(old.user_id)
         if (!user) {
+            clearRefreshCookie(res)
             return handleResponse(res, 403, "Invalid or expired refresh token")
         }
-        const accessToken = generateAccessToken(user)
 
-        handleResponse(res, 200, "Access token refreshed", { accessToken })
+        setRefreshCookie(res, newToken)
+        handleResponse(res, 200, "Access token refreshed", { accessToken: generateAccessToken(user) })
     } catch (err) {
-        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-            return handleResponse(res, 403, "Invalid or expired refresh token")
-        }
         next(err)
     }
 }
 
-// logout
+// logout — revokes this device's session (its whole token family)
 export const logoutController = async (req, res, next) => {
-    const token = req.cookies?.refreshToken
+    const token = req.cookies?.[REFRESH_COOKIE]
     try {
         if (token) {
-            await deleteRefreshToken(token)
-            log("Refresh token deleted")
+            const stored = await findRefreshToken(hashRefreshToken(token))
+            if (stored) {
+                await deleteRefreshTokenFamily(stored.family_id)
+                log("Refresh token session deleted")
+            }
         }
-        res.clearCookie('refreshToken', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-        })
+        clearRefreshCookie(res)
         handleResponse(res, 200, "Logged out successfully")
         log("Logged out successfully")
     } catch (err) {

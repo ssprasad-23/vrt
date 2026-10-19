@@ -22,7 +22,7 @@ Express 5 reverse proxy using ES modules (`"type": "module"`). This is the singl
 
 **No body parsing** (`server.js`): deliberately no `express.json()`. This is a pure passthrough proxy — the request body is streamed straight to the upstream service untouched. Parsing it here would consume the stream and break proxying of POST/PUT bodies (there's no need to read the body at the gateway; identity comes from the `Authorization` header).
 
-**Auth model — this is the important part**: the gateway is now the *only* place a JWT gets verified. `src/middleware/authenticate.js` verifies the `Authorization: Bearer <token>` header (`src/utility/tokens.js`, same `ACCESS_TOKEN_SECRET` as the `auth` service) and sets `req.user = { userId, email }`. `src/utility/proxyHeaders.js`'s `attachProxyHeaders` (wired as the proxy's `on.proxyReq` hook) then forwards that identity downstream as `x-user-id`/`x-user-email` headers, plus an `x-gateway-secret` header (`GATEWAY_SECRET` env, must match `upload`'s `.env`). `upload` no longer verifies JWTs itself — its `authenticate.js` middleware just checks `x-gateway-secret` matches and trusts `x-user-id`/`x-user-email` as-is. `proxyReq.setHeader` always overwrites rather than appends, so a client can't spoof these by sending its own `x-user-id`/`x-gateway-secret` headers — verified directly with a smoke test (fake upstreams + real token/no-token/bad-token/spoofed-header requests) when this was built.
+**Auth model — this is the important part**: the gateway is now the *only* place a JWT gets verified. `src/middleware/authenticate.js` verifies the `Authorization: Bearer <token>` header (`src/utility/tokens.js`, same `ACCESS_TOKEN_SECRET` as the `auth` service) with pinned `algorithms: ['HS256']`, `issuer: 'vrt-auth'` and `audience: 'vrt-api'`, and sets `req.user` to the decoded payload — the user id is in the standard `sub` claim (a string). `src/utility/proxyHeaders.js`'s `attachProxyHeaders` (wired as the proxy's `on.proxyReq` hook) then forwards `req.user.sub` downstream as an `x-user-id` header (email isn't forwarded — no service uses it), plus an `x-gateway-secret` header (`GATEWAY_SECRET` env, must match `upload`'s `.env`). `upload` no longer verifies JWTs itself — its `authenticate.js` middleware just checks `x-gateway-secret` matches and trusts `x-user-id` as-is. `proxyReq.setHeader` always overwrites rather than appends, so a client can't spoof these by sending its own `x-user-id`/`x-gateway-secret` headers — verified directly with a smoke test (fake upstreams + real token/no-token/bad-token/spoofed-header requests) when this was built.
 
 **auth's routes stay unauthenticated at the gateway**: `POST /userSignUp`, `POST /userLogin`, `POST /refreshToken`, `POST /logout` don't take an access token (you don't have one yet for signup/login; refresh/logout use the httpOnly refresh-token cookie instead), so `/auth/*` isn't behind `authenticate`.
 
@@ -34,7 +34,7 @@ Express 5 reverse proxy using ES modules (`"type": "module"`). This is the singl
 
 - Route/proxy definitions → `src/routes/gatewayRoutes.js`
 - JWT verification middleware → `src/middleware/authenticate.js`, `src/utility/tokens.js`
-- Header injection for downstream trust (`x-user-id`, `x-user-email`, `x-gateway-secret`) → `src/utility/proxyHeaders.js`
+- Header injection for downstream trust (`x-user-id`, `x-gateway-secret`) → `src/utility/proxyHeaders.js`
 - Upstream service URLs → `src/config/services.js`
 - Server bootstrap, global error handler → `server.js`
 
