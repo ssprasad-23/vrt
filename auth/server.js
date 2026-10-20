@@ -24,6 +24,10 @@ app.use((err, req, res, next) => {
 // startup sequence
 (async () => {
   try {
+    if (!process.env.RESET_CODE_SECRET) {
+      throw new Error("RESET_CODE_SECRET is not set (needed to hash password reset codes)");
+    }
+
     // Verify DB connectivity
     await db.query("SELECT 1");
     log("Database connected successfully");

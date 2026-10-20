@@ -91,6 +91,108 @@ export async function deleteExpiredRefreshTokens() {
   await pool.query('DELETE FROM refresh_tokens WHERE expires_at <= now()');
 }
 
+export async function findUserByEmail(email) {
+  // emails are stored lowercased and unique case-insensitively (users_email_lower_key)
+  const result = await pool.query('SELECT user_id, email FROM users WHERE lower(email) = lower($1)', [email.trim()]);
+  return result.rows[0];
+}
+
+// Password reset codes (password_reset_codes table, see src/data/passwordResetCodeTable.sql).
+export const MAX_RESET_CODE_ATTEMPTS = 5;
+
+// For the per-user send limits: when the last code went out, and how many in the past hour
+export async function getResetCodeStats(userId) {
+  const result = await pool.query(
+    `SELECT max(created_at) AS last_sent_at,
+            count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS sent_last_hour
+     FROM password_reset_codes WHERE user_id = $1`,
+    [userId]
+  );
+  return result.rows[0];
+}
+
+// Only the newest code works: any earlier unused ones are killed in the same transaction.
+export async function createResetCode(userId, codeHash, expiresAt) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'UPDATE password_reset_codes SET used_at = now() WHERE user_id = $1 AND used_at IS NULL',
+      [userId]
+    );
+    await client.query(
+      'INSERT INTO password_reset_codes (user_id, code_hash, expires_at) VALUES ($1, $2, $3)',
+      [userId, codeHash, expiresAt]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Uses up one guess on the user's live code (unused, not yet verified, unexpired, guesses left)
+// and returns the row, or undefined if there's no such code. Counting the guess *before*
+// checking it means parallel requests can't sneak in more than MAX_RESET_CODE_ATTEMPTS guesses.
+export async function claimResetCodeAttempt(userId) {
+  const result = await pool.query(
+    `UPDATE password_reset_codes SET attempts = attempts + 1
+     WHERE user_id = $1 AND used_at IS NULL AND reset_token_hash IS NULL
+       AND expires_at > now() AND attempts < $2
+     RETURNING *`,
+    [userId, MAX_RESET_CODE_ATTEMPTS]
+  );
+  return result.rows[0];
+}
+
+// Correct code: it can't be entered again; the reset token is what's good from here on.
+// Returns false if another request verified the same code first.
+export async function markResetCodeVerified(id, resetTokenHash, resetTokenExpiresAt) {
+  const result = await pool.query(
+    `UPDATE password_reset_codes SET reset_token_hash = $2, reset_token_expires_at = $3
+     WHERE id = $1 AND reset_token_hash IS NULL AND used_at IS NULL`,
+    [id, resetTokenHash, resetTokenExpiresAt]
+  );
+  return result.rowCount === 1;
+}
+
+// Sets the new password if the reset token is valid, spends the token, and logs the user out
+// of every device, all in one transaction. Returns false (nothing changed) for a bad token.
+export async function resetPasswordWithToken(resetTokenHash, newPassword) {
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE password_reset_codes SET used_at = now()
+       WHERE reset_token_hash = $1 AND used_at IS NULL AND reset_token_expires_at > now()
+       RETURNING user_id`,
+      [resetTokenHash]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    await client.query('UPDATE users SET password = $1 WHERE user_id = $2', [passwordHash, row.user_id]);
+    await client.query('DELETE FROM refresh_tokens WHERE user_id = $1', [row.user_id]);
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Housekeeping: codes are dead after 10 minutes, but a day's worth is kept for the send limits.
+export async function deleteOldResetCodes() {
+  await pool.query("DELETE FROM password_reset_codes WHERE created_at < now() - interval '1 day'");
+}
+
 export async function findUserById(userId) {
   const result = await pool.query('SELECT * FROM users WHERE user_id = $1', [userId]);
   const user = result.rows[0];

@@ -3,6 +3,9 @@ import React, {useEffect, useState} from 'react';
 import {View, ActivityIndicator} from 'react-native';
 import LoginPage from './src/screens/loginPage';
 import SignupPage from './src/screens/signupPage';
+import ForgotPasswordPage from './src/screens/forgotPasswordPage';
+import VerifyCodePage from './src/screens/verifyCodePage';
+import NewPasswordPage from './src/screens/newPasswordPage';
 import Home from './src/screens/home';
 import UploadPage from './src/screens/uploadPage';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
@@ -49,6 +52,9 @@ export default function App() {
               screenOptions={{ headerShown: false }}>
               <Stack.Screen name="LoginPage" component={LoginPage}/>
               <Stack.Screen name="SignupPage" component={SignupPage} />
+              <Stack.Screen name="ForgotPasswordPage" component={ForgotPasswordPage} />
+              <Stack.Screen name="VerifyCodePage" component={VerifyCodePage} />
+              <Stack.Screen name="NewPasswordPage" component={NewPasswordPage} />
               <Stack.Screen name="Home" component={Home} />
               <Stack.Screen name="UploadPage" component={UploadPage} presentation="modal" />
             </Stack.Navigator>

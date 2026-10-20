@@ -52,7 +52,23 @@ Every refresh token is single-use. Used rows are kept until they expire so a rep
 | 3 | Controller | `res.clearCookie('refreshToken', ...)` |
 | 4 | Controller | Returns `200 Logged out successfully` |
 
+## Password reset — `POST /forgotPassword` → `POST /verifyResetCode` → `POST /resetPassword`
+
+| Step | Actor | Action |
+|---|---|---|
+| 1 | Client | `POST /forgotPassword { email }` |
+| 2 | `forgotPassword` | `findUserByEmail()`. If found and under the per-user limits (60s cooldown, 5 codes/hour via `getResetCodeStats()`): `generateResetCode()` (6 digits, `crypto.randomInt`), `createResetCode()` stores `HMAC-SHA256(RESET_CODE_SECRET, code)` with a 10-minute expiry and kills older unused codes, then `sendResetCodeEmail()` (Resend; logs the code if `RESEND_API_KEY` is unset), not awaited |
+| 3 | Controller | Always `200 If that email is registered...` — unknown email or limit hit look the same |
+| 4 | Client | `POST /verifyResetCode { email, code }` |
+| 5 | `authModels.js` | `claimResetCodeAttempt()` — atomically uses one of 5 guesses on the live code; none left / expired / no code → `400 Invalid or expired code` |
+| 6 | Controller | Wrong code → same `400`. Right code → `markResetCodeVerified()` stores `sha256(resetToken)` (10 min) and returns `200 { resetToken }`; the code can't be entered again |
+| 7 | Client | `POST /resetPassword { resetToken, newPassword }` (same password rules as signup) |
+| 8 | `authModels.js` | `resetPasswordWithToken()` — one transaction: spends the token, `UPDATE users SET password = bcrypt(newPassword)`, deletes all the user's refresh tokens (logged out everywhere) |
+| 9 | Controller | `200 Password updated...`, or `400` for an unknown/spent/expired token |
+
+Per-IP limits on these three endpoints are applied in the gateway (`gateway/src/middleware/rateLimit.js`). Access tokens already issued stay valid until they expire (15m).
+
 ## Notes
 
 - No route currently uses `verifyAccessToken` from `tokens.js` — the gateway verifies access tokens; `src/middlewear/` isn't wired to any route.
-- `deleteAllRefreshTokensForUser` ("log out everywhere") exists but no route calls it yet.
+- `deleteAllRefreshTokensForUser` ("log out everywhere") exists but no route calls it yet (password reset does the same delete inside its own transaction).

@@ -15,9 +15,9 @@ No test runner is configured (`npm test` is a placeholder that exits with an err
 
 Express 5 REST API using ES modules (`"type": "module"` — use `import`/`export` throughout).
 
-**Request flow**: `server.js` → `src/routes/authRouters.js` → `src/controller/authController.js` → `src/models/authModels.js` → `src/config/configDB.js` (the shared `pg.Pool`). Routes are mounted at `/` in `server.js`, so paths are defined by the router itself (currently `POST /userSignUp`, `POST /userLogin`, `POST /refreshToken`, `POST /logout`).
+**Request flow**: `server.js` → `src/routes/authRouters.js` → `src/controller/authController.js` → `src/models/authModels.js` → `src/config/configDB.js` (the shared `pg.Pool`). Routes are mounted at `/` in `server.js`, so paths are defined by the router itself (currently `POST /userSignUp`, `POST /userLogin`, `POST /refreshToken`, `POST /logout`, `POST /forgotPassword`, `POST /verifyResetCode`, `POST /resetPassword`).
 
-**Startup sequence** (`server.js`): verifies DB connectivity with `SELECT 1`, calls `initDb()` (`src/data/createTable.js`) to create the `users` and `refresh_tokens` tables if absent, then starts the HTTP server. A centralized error-handling middleware (last `app.use` in `server.js`) catches anything passed to `next(err)` from controllers and responds with a generic 500.
+**Startup sequence** (`server.js`): verifies DB connectivity with `SELECT 1`, calls `initDb()` (`src/data/createTable.js`) to create the `users`, `refresh_tokens` and `password_reset_codes` tables if absent (it first refuses to start without `RESET_CODE_SECRET`), then starts the HTTP server. A centralized error-handling middleware (last `app.use` in `server.js`) catches anything passed to `next(err)` from controllers and responds with a generic 500.
 
 **Database** (`src/config/configDB.js`): exports a single `pg.Pool` instance. All queries use this pool. Configured via `.env`: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, plus `PORT` for the HTTP server.
 
@@ -27,11 +27,11 @@ Express 5 REST API using ES modules (`"type": "module"` — use `import`/`export
 
 ## Services
 
-Single-service repo — no microservices split yet.
+One of the services in this monorepo (see `../README.md`); clients reach it through the `gateway` at `/auth/*`.
 
 | Service | Path | Port | Language/Runtime | Depends on | Owns data |
 |---|---|---|---|---|---|
-| auth service | repo root, entry `server.js` | `PORT` (from `.env`) | Node.js, ES modules, Express 5 | PostgreSQL via `pg.Pool` (`src/config/configDB.js`) | `users`, `refresh_tokens` tables |
+| auth service | `auth/`, entry `server.js` | `PORT` (from `.env`) | Node.js, ES modules, Express 5 | PostgreSQL via `pg.Pool` (`src/config/configDB.js`) | `users`, `refresh_tokens`, `password_reset_codes` tables |
 
 ## Data flow for key use cases
 
@@ -41,7 +41,9 @@ Single-service repo — no microservices split yet.
 
 **Refresh** (`POST /refreshToken`): reads the refresh token cookie → `rotateRefreshToken` (one transaction) marks it used and stores a new token in the same family → the new token replaces the cookie with a fresh 30-day expiry (sliding) and a new access token is returned. Refresh tokens are single-use: presenting an already-used one is treated as theft and `deleteRefreshTokenFamily` revokes that login session. Logout also deletes the whole family. `server.js`'s `initDb()` recreates an old-format `refresh_tokens` table (raw `token` column) on boot, logging everyone out once.
 
-Full step-by-step tables (including logout) live in `AUTH_FLOW.md`.
+**Password reset** (`POST /forgotPassword` → `/verifyResetCode` → `/resetPassword`): a 6-digit code (stored as an HMAC keyed with `RESET_CODE_SECRET`, 10-minute expiry, 5 guesses) is emailed via Resend (`src/utility/email.js`; with no `RESEND_API_KEY` it's logged instead). `forgotPassword` always answers `200` so it can't be used to discover accounts, and silently skips sending inside a 60s cooldown or past 5 codes/hour per user. A correct code is exchanged for a one-time reset token (SHA-256 stored, 10 minutes), which `resetPassword` uses to set the new password and delete all the user's refresh tokens in one transaction. Per-IP limits are in the gateway.
+
+Full step-by-step tables (including logout and password reset) live in `AUTH_FLOW.md`.
 
 ## Event/message contracts
 
@@ -51,24 +53,25 @@ None — this repo has no message queue or pub/sub broker (no Kafka/RabbitMQ/Red
 
 - Route definitions → `src/routes/authRouters.js`
 - Request handling / response shaping → `src/controller/authController.js`
-- DB queries (users + refresh tokens) → `src/models/authModels.js`
+- DB queries (users, refresh tokens, password reset codes) → `src/models/authModels.js`
+- Password reset email (Resend) → `src/utility/email.js`
 - DB connection pool → `src/config/configDB.js`
-- Table creation on startup → `src/data/createTable.js`, SQL in `src/data/userTable.sql` and `src/data/refreshTokenTable.sql`
+- Table creation on startup → `src/data/createTable.js`, SQL in `src/data/userTable.sql`, `src/data/refreshTokenTable.sql` and `src/data/passwordResetCodeTable.sql`
 - Access-token JWT signing/verification, refresh-token generation/hashing, TTLs → `src/utility/tokens.js`
 - Bearer-token auth middleware (not yet wired to any route) → `src/middlewear/authenticate.js`
 - Server bootstrap, DB health check, global error handler → `server.js`
 
 ## Local dev / run instructions
 
-Requires a running PostgreSQL instance and a `.env` file with: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `ACCESS_TOKEN_SECRET` (optionally `ACCESS_TOKEN_EXPIRY`, default `15m`, and `REFRESH_TOKEN_TTL_DAYS`, default `30`; refresh tokens are random, so there's no refresh secret). Then:
+Requires a running PostgreSQL instance and a `.env` file with: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `ACCESS_TOKEN_SECRET` (optionally `ACCESS_TOKEN_EXPIRY`, default `15m`, and `REFRESH_TOKEN_TTL_DAYS`, default `30`; refresh tokens are random, so there's no refresh secret), `RESET_CODE_SECRET` (any long random string, required), and for emailing reset codes `RESEND_API_KEY` + `RESEND_FROM` (a sender on a domain verified in Resend; `onboarding@resend.dev` only delivers to the Resend account's own email). Then:
 
 ```bash
 npm start        # run server
 npm run dev      # run server with auto-reload (node --watch)
 ```
 
-`server.js` creates the `users` and `refresh_tokens` tables on boot if they don't already exist — no separate migration step needed.
+`server.js` creates the `users`, `refresh_tokens` and `password_reset_codes` tables on boot if they don't already exist — no separate migration step needed.
 
 ## Known issues
 
-- No rate limiting on login/signup (plan: WAF on the load balancer). Passwords are hashed with `bcrypt` (`SALT_ROUNDS = 10`) in `createUserService`/`loginUserService` (`src/models/authModels.js`).
+- No rate limiting on login/signup (plan: WAF on the load balancer). Password reset is limited per IP in the gateway and per user in `forgotPassword`. Passwords are hashed with `bcrypt` (`SALT_ROUNDS = 10`) in `createUserService`/`loginUserService` (`src/models/authModels.js`).
