@@ -100,4 +100,4 @@ A "cache microservice" (an HTTP server in front of Redis that `feed` calls) woul
 ## Possible next steps
 
 - **Clear the cache on new videos:** `upload`'s transcode-completed worker could `DEL feed:first` when a video's H.264 encode lands, so new videos appear immediately instead of within 30 seconds.
-- **Login rate limiting:** count login attempts per IP at the gateway (`INCR` + `EXPIRE`) to slow down password guessing.
+- **Login rate limiting:** count login attempts per IP at the gateway (`INCR` + `EXPIRE`) to slow down password guessing. The gateway already rate-limits password reset with `express-rate-limit`, but in memory; pointing its store at Redis would share the counts across gateway instances.

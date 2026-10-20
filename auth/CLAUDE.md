@@ -27,11 +27,11 @@ Express 5 REST API using ES modules (`"type": "module"` — use `import`/`export
 
 ## Services
 
-Single-service repo — no microservices split yet.
+One of the services in this monorepo (see `../README.md`); clients reach it through the `gateway` at `/auth/*`.
 
 | Service | Path | Port | Language/Runtime | Depends on | Owns data |
 |---|---|---|---|---|---|
-| auth service | repo root, entry `server.js` | `PORT` (from `.env`) | Node.js, ES modules, Express 5 | PostgreSQL via `pg.Pool` (`src/config/configDB.js`) | `users`, `refresh_tokens`, `password_reset_codes` tables |
+| auth service | `auth/`, entry `server.js` | `PORT` (from `.env`) | Node.js, ES modules, Express 5 | PostgreSQL via `pg.Pool` (`src/config/configDB.js`) | `users`, `refresh_tokens`, `password_reset_codes` tables |
 
 ## Data flow for key use cases
 
@@ -70,7 +70,7 @@ npm start        # run server
 npm run dev      # run server with auto-reload (node --watch)
 ```
 
-`server.js` creates the `users` and `refresh_tokens` tables on boot if they don't already exist — no separate migration step needed.
+`server.js` creates the `users`, `refresh_tokens` and `password_reset_codes` tables on boot if they don't already exist — no separate migration step needed.
 
 ## Known issues
 

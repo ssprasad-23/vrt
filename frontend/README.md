@@ -1,79 +1,72 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# VRT app (React Native)
 
-# Getting Started
+The mobile app for VRT: a dark, TikTok-style vertical feed of short gaming clips, with login, signup, password reset and video upload. It's a React Native 0.76 app using the community CLI (not Expo), styled with NativeWind (Tailwind) and some `StyleSheet` files.
 
->**Note**: Make sure you have completed the [React Native - Environment Setup](https://reactnative.dev/docs/environment-setup) instructions till "Creating a new application" step, before proceeding.
+It talks to the backend only through the API gateway (`../gateway`), plus the MinIO/S3 bucket directly to upload files and play videos. See the [top-level README](../README.md) for the whole system.
 
-## Step 1: Start the Metro Server
+## Screens
 
-First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
+| Screen | File | What it does |
+|---|---|---|
+| Login | `src/screens/loginPage.js` | Username + password. Links to Sign Up and Forgot password. |
+| Sign Up | `src/screens/signupPage.js` | Creates an account (username, email, password, date of birth, phone, country). |
+| Forgot password | `src/screens/forgotPasswordPage.js` | Sends a 6-digit code to the user's email. |
+| Enter code | `src/screens/verifyCodePage.js` | Checks the code (with "Resend code"). A correct code gets a one-time reset token. |
+| New password | `src/screens/newPasswordPage.js` | New password + confirm, then back to Login. |
+| Home (feed) | `src/screens/home.js` | Vertically snapping video feed with paging and pull-to-refresh. Only the video on screen plays. Menu: Upload, Log Out. |
+| Upload | `src/screens/uploadPage.js` | Pick a video (≤ 500 MB, ≤ 60s), add a description and category, upload, then get told when it's ready or why it failed. |
 
-To start Metro, run the following command from the _root_ of your React Native project:
+On launch the app tries a silent token refresh, so a user with a saved session goes straight to Home.
 
-```bash
-# using npm
-npm start
+## Run it
 
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Start your Application
-
-Let Metro Bundler run in its _own_ terminal. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ or _iOS_ app:
-
-### For Android
+You need the React Native toolchain ([environment setup](https://reactnative.dev/docs/set-up-your-environment)): Xcode and CocoaPods for iOS, Android Studio for Android. The backend services should be running too (see the top-level README).
 
 ```bash
-# using npm
-npm run android
+npm install
+cd ios && pod install && cd ..   # iOS only, after installing or changing native deps
 
-# OR using Yarn
-yarn android
+npm start          # Metro bundler, in its own terminal
+npm run ios        # build and run on the iOS Simulator
+npm run android    # build and run on an Android emulator
 ```
 
-### For iOS
+From the repo root, `npm run dev` starts all the backend services and the iOS app together.
+
+### Configuration
+
+Create `frontend/.env` (gitignored, loaded through `react-native-dotenv` as the `@env` module):
+
+```
+API_URL_IOS=http://localhost:8080
+API_URL_ANDROID=http://10.0.2.2:8080
+MEDIA_URL_IOS=http://localhost:9000/media
+MEDIA_URL_ANDROID=http://10.0.2.2:9000/media
+```
+
+The Android emulator reaches your computer at `10.0.2.2`, not `localhost`. After changing `.env`, restart Metro with `npm start -- --reset-cache`.
+
+## Code layout
+
+```
+App.jsx                  navigation stack, auto-login, session-expired handling
+src/screens/             one file per screen
+src/components/Post/     a single feed video with its overlay controls
+src/api/client.js        the one axios instance (gateway base URL, Bearer token, refresh-and-retry)
+src/api/errors.js        getErrorMessage(): the server's message, or a plain network/timeout message
+src/api/feed.js          GET /feed paging
+src/api/uploadStatus.js  polls an upload until it's ready or failed
+src/api/uploadLimits.js  size/length limits (mirrors the upload service)
+src/context/AuthContext.js  the access token, readable from React and from the axios interceptors
+```
+
+All requests go through `apiClient` from `src/api/client.js`; don't call axios directly. When an access token expires, the client refreshes it once and retries. Auth endpoints listed in `AUTH_EXEMPT_PATHS` never trigger a refresh.
+
+## Tests and lint
 
 ```bash
-# using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+npm test       # Jest (only the default App test so far)
+npm run lint   # ESLint (the config currently fails to load: `requireConfigFile` in .eslintrc.js)
 ```
 
-If everything is set up _correctly_, you should see your new app running in your _Android Emulator_ or _iOS Simulator_ shortly provided you have set up your emulator/simulator correctly.
-
-This is one way to run your app — you can also run it directly from within Android Studio and Xcode respectively.
-
-## Step 3: Modifying your App
-
-Now that you have successfully run the app, let's modify it.
-
-1. Open `App.tsx` in your text editor of choice and edit some lines.
-2. For **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Developer Menu** (<kbd>Ctrl</kbd> + <kbd>M</kbd> (on Window and Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (on macOS)) to see your changes!
-
-   For **iOS**: Hit <kbd>Cmd ⌘</kbd> + <kbd>R</kbd> in your iOS Simulator to reload the app and see your changes!
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [Introduction to React Native](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you can't get this to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+More detail for contributors is in [`CLAUDE.md`](CLAUDE.md).
