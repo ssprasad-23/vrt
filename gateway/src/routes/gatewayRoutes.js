@@ -1,6 +1,7 @@
 import express from "express"
 import { createProxyMiddleware } from "http-proxy-middleware"
 import { authenticate } from "../middleware/authenticate.js"
+import { forgotPasswordLimiter, verifyResetCodeLimiter, resetPasswordLimiter } from "../middleware/rateLimit.js"
 import { attachProxyHeaders } from "../utility/proxyHeaders.js"
 import { SERVICE_TARGETS } from "../config/services.js"
 
@@ -12,6 +13,12 @@ const router = express.Router()
 // instead) — so no authenticate here. No pathRewrite needed either: Express's
 // router.use("/auth", ...) already strips the /auth prefix before the proxy sees it,
 // which happens to be exactly the path auth's own router expects.
+//
+// The password reset endpoints are rate limited per IP first (see middleware/rateLimit.js).
+// These must come before the /auth proxy, which would otherwise answer first.
+router.post("/auth/forgotPassword", forgotPasswordLimiter)
+router.post("/auth/verifyResetCode", verifyResetCodeLimiter)
+router.post("/auth/resetPassword", resetPasswordLimiter)
 router.use("/auth", createProxyMiddleware({
     target: SERVICE_TARGETS.auth,
     changeOrigin: true,

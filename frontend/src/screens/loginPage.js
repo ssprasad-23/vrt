@@ -64,13 +64,19 @@ const LoginPage = ({navigation}) => {
           />
 
           <TextInput
-            className="w-full h-12 rounded-xl px-4 bg-[#2c2c2e] mb-6 text-white"
+            className="w-full h-12 rounded-xl px-4 bg-[#2c2c2e] mb-3 text-white"
             placeholder="Password"
             placeholderTextColor="#8E8E93"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
           />
+
+          <TouchableOpacity
+            className="self-end mb-6"
+            onPress={() => navigation.navigate('ForgotPasswordPage')}>
+            <Text className="text-gray-400">Forgot password?</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             className="w-full h-12 bg-white rounded-xl justify-center items-center"

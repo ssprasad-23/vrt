@@ -7,14 +7,31 @@ import {
     findRefreshToken,
     deleteRefreshTokenFamily,
     deleteExpiredRefreshTokens,
-    findUserById } from "../models/authModels.js"
+    findUserById,
+    findUserByEmail,
+    getResetCodeStats,
+    createResetCode,
+    claimResetCodeAttempt,
+    markResetCodeVerified,
+    resetPasswordWithToken,
+    deleteOldResetCodes } from "../models/authModels.js"
 import { generateAccessToken,
          generateRefreshToken,
          hashRefreshToken,
          refreshTokenExpiresAt,
-         REFRESH_TOKEN_MAX_AGE_MS } from '../utility/tokens.js';
+         REFRESH_TOKEN_MAX_AGE_MS,
+         generateResetCode,
+         hashResetCode,
+         resetCodeMatches,
+         resetExpiresAt } from '../utility/tokens.js';
+import { sendResetCodeEmail } from "../utility/email.js"
 import { log, logError } from "../utility/logger.js"
-import { validateSignup, validateLogin, normalizePhone } from "../utility/validation.js"
+import { validateSignup,
+         validateLogin,
+         normalizePhone,
+         validateForgotPassword,
+         validateVerifyResetCode,
+         validateResetPassword } from "../utility/validation.js"
 
 
 //Standardise response function
@@ -152,6 +169,87 @@ export const logoutController = async (req, res, next) => {
         clearRefreshCookie(res)
         handleResponse(res, 200, "Logged out successfully")
         log("Logged out successfully")
+    } catch (err) {
+        next(err)
+    }
+}
+
+// Password reset, three steps: forgotPassword emails a 6-digit code -> verifyResetCode swaps
+// the right code for a one-time reset token -> resetPassword uses that token to set the password.
+
+// Per-user send limits. Hitting one is silent (same 200 as a successful send): telling the
+// caller would reveal that the email has an account. Per-IP limits live in the gateway.
+const RESET_CODE_COOLDOWN_MS = 60 * 1000
+const RESET_CODES_PER_HOUR = 5
+
+// forgot password — always the same answer, whether or not the email has an account
+export const forgotPassword = async (req, res, next) => {
+    const invalid = validateForgotPassword(req.body ?? {})
+    if (invalid) {
+        return handleResponse(res, 400, invalid)
+    }
+    try {
+        await deleteOldResetCodes()
+        const user = await findUserByEmail(req.body.email)
+        if (user) {
+            const { last_sent_at, sent_last_hour } = await getResetCodeStats(user.user_id)
+            const coolingDown = last_sent_at && Date.now() - new Date(last_sent_at).getTime() < RESET_CODE_COOLDOWN_MS
+            if (coolingDown || sent_last_hour >= RESET_CODES_PER_HOUR) {
+                log(`Password reset code not sent for user ${user.user_id}: send limit reached`)
+            } else {
+                const code = generateResetCode()
+                await createResetCode(user.user_id, hashResetCode(code), resetExpiresAt())
+                // Not awaited, so the response takes about as long whether the account exists or not
+                sendResetCodeEmail(user.email, code).catch(err => logError("Password reset email failed:", err))
+            }
+        }
+        handleResponse(res, 200, "If that email is registered, a 6-digit code has been sent to it")
+    } catch (err) {
+        next(err)
+    }
+}
+
+// verify code — a correct code returns the reset token for the set-new-password step
+export const verifyResetCode = async (req, res, next) => {
+    const invalid = validateVerifyResetCode(req.body ?? {})
+    if (invalid) {
+        return handleResponse(res, 400, invalid)
+    }
+    const { email, code } = req.body
+    try {
+        const user = await findUserByEmail(email)
+        // claiming the attempt first: no code, expired, or out of guesses all end up here
+        const resetCode = user && await claimResetCodeAttempt(user.user_id)
+        if (!resetCode || !resetCodeMatches(code, resetCode.code_hash)) {
+            return handleResponse(res, 400, "Invalid or expired code")
+        }
+
+        // same kind of random, SHA-256-stored token as a refresh token
+        const resetToken = generateRefreshToken()
+        const verified = await markResetCodeVerified(resetCode.id, hashRefreshToken(resetToken), resetExpiresAt())
+        if (!verified) {
+            return handleResponse(res, 400, "Invalid or expired code")
+        }
+        handleResponse(res, 200, "Code verified", { resetToken })
+    } catch (err) {
+        next(err)
+    }
+}
+
+// set new password — also logs the user out everywhere (their refresh tokens are deleted)
+export const resetPassword = async (req, res, next) => {
+    const invalid = validateResetPassword(req.body ?? {})
+    if (invalid) {
+        return handleResponse(res, 400, invalid)
+    }
+    const { resetToken, newPassword } = req.body
+    try {
+        const updated = await resetPasswordWithToken(hashRefreshToken(resetToken), newPassword)
+        if (!updated) {
+            return handleResponse(res, 400, "Your reset session has expired. Please request a new code.")
+        }
+        log("Password reset")
+        handleResponse(res, 200, "Password updated. Please log in with your new password.")
     } catch (err) {
         next(err)
     }

@@ -14,6 +14,9 @@ const AUTH_EXEMPT_PATHS = [
   '/auth/userLogin',
   '/auth/userSignUp',
   '/auth/logout',
+  '/auth/forgotPassword',
+  '/auth/verifyResetCode',
+  '/auth/resetPassword',
 ];
 
 let refreshPromise = null;

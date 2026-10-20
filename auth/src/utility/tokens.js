@@ -52,3 +52,25 @@ export function hashRefreshToken(token) {
 export function refreshTokenExpiresAt() {
   return new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_MS);
 }
+
+// Password reset: a 6-digit code is emailed; entering it correctly swaps it for a one-time
+// reset token that authorises setting the new password. Both expire after this long.
+export const RESET_CODE_TTL_MS = 10 * 60 * 1000;
+
+export function generateResetCode() {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+// Unlike refresh tokens, a plain SHA-256 isn't enough here: there are only a million codes, so
+// a leaked hash could be reversed by trying them all. Keying it with a server secret stops that.
+export function hashResetCode(code) {
+  return crypto.createHmac('sha256', process.env.RESET_CODE_SECRET).update(code).digest('hex');
+}
+
+export function resetCodeMatches(code, codeHash) {
+  return crypto.timingSafeEqual(Buffer.from(hashResetCode(code)), Buffer.from(codeHash));
+}
+
+export function resetExpiresAt() {
+  return new Date(Date.now() + RESET_CODE_TTL_MS);
+}

@@ -47,6 +47,22 @@ export default async function initDb() {
   } else {
     log("Refresh tokens table already exists");
   }
+
+  const resetTableExists = await db.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public'
+      AND table_name = 'password_reset_codes'
+    );
+  `);
+
+  if (!resetTableExists.rows[0].exists) {
+    const sqlFile = path.join(__dirname, "../data/passwordResetCodeTable.sql");
+    await db.query(fs.readFileSync(sqlFile, "utf8"));
+    log("Password reset codes table created");
+  } else {
+    log("Password reset codes table already exists");
+  }
 }
 
 async function createRefreshTokensTable() {

@@ -38,11 +38,9 @@ export function validateSignup({ username, email, password, dob, phone_number, c
   if (email.length > 255 || !EMAIL_PATTERN.test(email)) {
     return 'Invalid email address';
   }
-  if (password.length < PASSWORD_MIN_LENGTH) {
-    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters`;
-  }
-  if (Buffer.byteLength(password, 'utf8') > PASSWORD_MAX_BYTES) {
-    return `Password must be at most ${PASSWORD_MAX_BYTES} bytes`;
+  const badPassword = validatePassword(password);
+  if (badPassword) {
+    return badPassword;
   }
 
   // reject impossible dates like 2001-02-30, which Date would silently roll over
@@ -74,4 +72,44 @@ export function validateLogin({ username, password }) {
     return 'username and password are required';
   }
   return null;
+}
+
+// Shared by signup and password reset so both enforce the same rules
+function validatePassword(password) {
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters`;
+  }
+  if (Buffer.byteLength(password, 'utf8') > PASSWORD_MAX_BYTES) {
+    return `Password must be at most ${PASSWORD_MAX_BYTES} bytes`;
+  }
+  return null;
+}
+
+const isValidEmail = (email) => isNonEmptyString(email) && email.length <= 255 && EMAIL_PATTERN.test(email.trim());
+
+export function validateForgotPassword({ email }) {
+  if (!isValidEmail(email)) {
+    return 'A valid email address is required';
+  }
+  return null;
+}
+
+export function validateVerifyResetCode({ email, code }) {
+  if (!isValidEmail(email)) {
+    return 'A valid email address is required';
+  }
+  if (typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+    return 'The code must be 6 digits';
+  }
+  return null;
+}
+
+export function validateResetPassword({ resetToken, newPassword }) {
+  if (!isNonEmptyString(resetToken) || resetToken.length > 100) {
+    return 'resetToken is required';
+  }
+  if (typeof newPassword !== 'string') {
+    return 'newPassword is required';
+  }
+  return validatePassword(newPassword);
 }
