@@ -70,5 +70,5 @@ Per-IP limits on these three endpoints are applied in the gateway (`gateway/src/
 
 ## Notes
 
-- No route currently uses `verifyAccessToken` from `tokens.js` — the gateway verifies access tokens; `src/middlewear/` isn't wired to any route.
+- No route currently uses `verifyAccessToken` from `tokens.js` — the gateway verifies access tokens; `src/middleware/` isn't wired to any route.
 - `deleteAllRefreshTokensForUser` ("log out everywhere") exists but no route calls it yet (password reset does the same delete inside its own transaction).

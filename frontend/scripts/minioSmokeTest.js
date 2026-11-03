@@ -1,4 +1,4 @@
-// test.js
+// minioSmokeTest.js
 import { PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { s3Client } from "./s3Client.js";
 
