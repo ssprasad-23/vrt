@@ -58,7 +58,7 @@ None — this repo has no message queue or pub/sub broker (no Kafka/RabbitMQ/Red
 - DB connection pool → `src/config/configDB.js`
 - Table creation on startup → `src/data/createTable.js`, SQL in `src/data/userTable.sql`, `src/data/refreshTokenTable.sql` and `src/data/passwordResetCodeTable.sql`
 - Access-token JWT signing/verification, refresh-token generation/hashing, TTLs → `src/utility/tokens.js`
-- Bearer-token auth middleware (not yet wired to any route) → `src/middlewear/authenticate.js`
+- Bearer-token auth middleware (not yet wired to any route) → `src/middleware/authenticate.js`
 - Server bootstrap, DB health check, global error handler → `server.js`
 
 ## Local dev / run instructions

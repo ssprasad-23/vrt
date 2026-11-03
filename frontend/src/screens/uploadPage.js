@@ -19,9 +19,16 @@ import {
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_MB,
   MAX_VIDEO_DURATION_SECONDS,
+  ALLOWED_VIDEO_SIZES,
 } from '../api/uploadLimits';
 
 const categories = ['Videos'];
+
+const alertWrongSize = (width, height) =>
+  Alert.alert(
+    'Wrong video size',
+    `Only 720p (720x1280) or 1080p (1080x1920) videos are accepted, portrait or landscape. This one is ${width}x${height}.`,
+  );
 
 const UploadPage = ({navigation}) => {
   const [video, setVideo] = useState(null);
@@ -44,6 +51,16 @@ const UploadPage = ({navigation}) => {
     }
     if (asset.fileSize > MAX_UPLOAD_BYTES) {
       Alert.alert('Video too large', `Videos can be up to ${MAX_UPLOAD_MB} MB.`);
+      return;
+    }
+    // Either orientation is allowed, so compare the sides in sorted order. That also covers
+    // iOS, where the picker's width/height ignore rotation (a portrait clip can report 1920x1080).
+    const [shortSide, longSide] = [asset.width, asset.height].sort((a, b) => a - b);
+    const allowed = ALLOWED_VIDEO_SIZES.some(
+      ([short, long]) => short === shortSide && long === longSide,
+    );
+    if (!allowed) {
+      alertWrongSize(asset.width ?? 0, asset.height ?? 0);
       return;
     }
     setVideo(asset);
@@ -132,6 +149,9 @@ const UploadPage = ({navigation}) => {
               <Text style={styles.videoPickerText}>Tap to select a video</Text>
               <Text style={styles.videoPickerSubtext}>
                 From your camera roll
+              </Text>
+              <Text style={styles.videoPickerSubtext}>
+                720p or 1080p, portrait or landscape
               </Text>
             </>
           )}
