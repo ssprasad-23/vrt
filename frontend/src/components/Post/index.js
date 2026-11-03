@@ -105,12 +105,8 @@ const Post = (props) => {
         </View>
       </View>
 
-      {post.user.imageUri ? (
+      {post.user.imageUri && (
         <Image style = {[styles.profilePic, {top: avatarTop, left: 16 + insets.left}]} source={{uri: post.user.imageUri}}/>
-      ) : (
-        <View style = {[styles.profilePic, styles.profilePlaceholder, {top: avatarTop, left: 16 + insets.left}]}>
-          <Text style = {styles.profileInitial}>{post.user.username?.[0]?.toUpperCase()}</Text>
-        </View>
       )}
     </View>
   );
