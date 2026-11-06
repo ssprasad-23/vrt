@@ -18,7 +18,7 @@ export const getFeedPage = async (limit, cursor) => {
 
     const result = await pool.query(
         `SELECT video_id, user_id, h264_s3_key, av1_s3_key, description, category,
-                created_at, created_at::text AS cursor_created_at
+                created_at::text AS cursor_created_at
          FROM videos
          WHERE ${where}
          ORDER BY created_at DESC, video_id DESC

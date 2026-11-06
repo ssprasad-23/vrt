@@ -85,14 +85,12 @@ export const getFeed = async (req, res, next) => {
         const videos = page.map(row => ({
             videoId: row.video_id,
             userId: row.user_id,
-            // H.264 key within the public media bucket — the client builds the playable URL from it
-            videoKey: row.h264_s3_key,
-            // every encoded version, so a client that can decode AV1 in hardware may pick it
-            // (av1 is null until its slower encode finishes)
+            // keys within the public media bucket — the client builds the playable URL from h264
+            // (plays everywhere); av1 is null until its slower encode finishes, and only worth
+            // picking on a device that can decode AV1 in hardware
             videoKeys: { h264: row.h264_s3_key, av1: row.av1_s3_key },
             description: row.description,
             category: row.category,
-            createdAt: row.created_at,
         }))
 
         const last = page[page.length - 1]

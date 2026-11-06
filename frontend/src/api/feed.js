@@ -21,7 +21,7 @@ export const fetchFeed = async (cursor = null) => {
 // Maps a feed API video into the shape the Post component renders.
 export const toPost = video => ({
   id: video.videoId,
-  videoUri: mediaUrl(video.videoKey),
+  videoUri: mediaUrl(video.videoKeys.h264),
   description: video.description,
   category: video.category,
   user: {id: video.userId, username: `user${video.userId}`},
