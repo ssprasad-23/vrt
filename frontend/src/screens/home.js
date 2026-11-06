@@ -100,6 +100,9 @@ const Home = ({navigation}) => {
     navigation.navigate('UploadPage');
   };
 
+  // shown in the ⋮ menu for the video currently on screen; undefined while the feed is empty
+  const activeVideoId = posts[activeIndex]?.id;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -167,6 +170,15 @@ const Home = ({navigation}) => {
         onRequestClose={() => setMenuVisible(false)}>
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           <View style={[styles.menuDropdown, {top: Math.max(insets.top - 3, 12) + 37, right: 16 + insets.right}]}>
+            {activeVideoId && (
+              <>
+                <View style={styles.menuItem}>
+                  {/* selectable: long-press to copy, without a clipboard library */}
+                  <Text style={styles.menuIdText} selectable>ID: {activeVideoId}</Text>
+                </View>
+                <View style={styles.menuDivider} />
+              </>
+            )}
             <TouchableOpacity style={styles.menuItem} onPress={handleUpload} activeOpacity={0.7}>
               <Text style={styles.menuItemText}>Upload</Text>
             </TouchableOpacity>
@@ -253,6 +265,10 @@ const styles = StyleSheet.create({
   menuItemText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 14,
+  },
+  menuIdText: {
+    color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
   },
   menuDivider: {
