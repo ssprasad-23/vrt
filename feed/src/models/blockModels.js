@@ -32,12 +32,12 @@ export const getBlockedUsers = async (blockerId) => {
     return result.rows
 }
 
-// True if this user has blocked anyone or been blocked by anyone. Their feed then differs
-// from everyone else's, so it can't be served from the shared first-page cache.
+// True if this user has blocked anyone. Their feed then differs from everyone else's, so it
+// can't be served from the shared first-page cache. (Being blocked doesn't change your feed.)
 export const hasAnyBlocks = async (userId) => {
     const result = await pool.query(
         `SELECT EXISTS (
-            SELECT 1 FROM user_blocks WHERE blocker_id = $1 OR blocked_id = $1
+            SELECT 1 FROM user_blocks WHERE blocker_id = $1
          ) AS has_blocks`,
         [userId]
     )

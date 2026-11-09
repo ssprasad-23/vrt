@@ -9,16 +9,15 @@ import pool from '../config/configDB.js'
 // repeats the way OFFSET would. video_id breaks ties between identical timestamps.
 // created_at::text keeps full microsecond precision for the next cursor.
 //
-// Blocks hide videos in both directions: the viewer doesn't see videos from users they
-// blocked, nor from users who blocked them. Filtering here (not after the query) keeps
-// pages full and the cursor correct.
+// Blocks are one-way: the viewer doesn't see videos from users they blocked, but a blocked
+// user still sees the blocker's videos (posted videos are public). Filtering here (not
+// after the query) keeps pages full and the cursor correct.
 export const getFeedPage = async (limit, cursor, viewerId) => {
     const params = [limit, viewerId]
     let where = `h264_s3_key IS NOT NULL
            AND NOT EXISTS (
                SELECT 1 FROM user_blocks b
-               WHERE (b.blocker_id = $2 AND b.blocked_id = videos.user_id)
-                  OR (b.blocker_id = videos.user_id AND b.blocked_id = $2)
+               WHERE b.blocker_id = $2 AND b.blocked_id = videos.user_id
            )`
     if (cursor) {
         params.push(cursor.createdAt, cursor.videoId)

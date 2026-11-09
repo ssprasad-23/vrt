@@ -35,7 +35,7 @@ The app only ever talks to the **gateway** (plus MinIO directly for the upload i
 | [`auth`](auth) | 3000 | Signup, login, refresh-token rotation, logout, password reset by emailed 6-digit code. | `users`, `refresh_tokens`, `password_reset_codes` |
 | [`upload`](upload) | 3001 | Issues presigned upload URLs, confirms uploads, queues transcode jobs, records finished encodes, upload status. | `videos` |
 | [`transcode`](transcode) | — | Headless SQS worker. Downloads the original, checks it (≤ 60s), extracts preview frames, encodes H.264 then AV1 with ffmpeg, uploads to `media`, reports back. | `transcode_jobs` |
-| [`feed`](feed) | 3003 | Paginated feed of ready videos, newest first, hiding blocked users both ways. Block/unblock/list users. Caches the first page in Redis for 30s for viewers with no blocks. | `user_blocks` (reads `videos`) |
+| [`feed`](feed) | 3003 | Paginated feed of ready videos, newest first, hiding videos from users the viewer blocked (one-way). Block/unblock/list users. Caches the first page in Redis for 30s for viewers with no blocks. | `user_blocks` (reads `videos`) |
 | [`frontend`](frontend) | — | React Native 0.76 app (iOS/Android): login/signup/password reset, video feed, upload. | — |
 | [`redis`](redis) | 6379 | Config and docs for the feed cache. | — |
 

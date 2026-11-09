@@ -18,7 +18,7 @@ const MAX_PAGE_SIZE = 20
 
 // The first page (no cursor, default limit) is the same for every user without blocks and
 // requested on every app open, so it's cached in Redis. Later pages aren't. Users who have
-// blocked someone (or been blocked) get a different page, so they skip the cache. See
+// blocked someone get a different page, so they skip the cache. See
 // redis/README.md.
 const FEED_FIRST_PAGE_KEY = "feed:first"
 const FEED_FIRST_PAGE_TTL_SECONDS = 30

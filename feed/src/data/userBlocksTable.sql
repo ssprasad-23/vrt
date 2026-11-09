@@ -1,5 +1,5 @@
--- One row per block: blocker_id doesn't want to see blocked_id, and vice versa (the feed
--- filters both directions). User ids come from the auth service's users table, which lives
+-- One row per block: blocker_id doesn't see blocked_id's videos (one-way; blocked_id still
+-- sees blocker_id's). User ids come from the auth service's users table, which lives
 -- in a different database, so there's no foreign key.
 CREATE TABLE IF NOT EXISTS user_blocks (
     blocker_id INTEGER NOT NULL,
