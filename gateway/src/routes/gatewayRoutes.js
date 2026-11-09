@@ -48,4 +48,13 @@ router.use("/feed", authenticate, createProxyMiddleware({
     on: { proxyReq: attachProxyHeaders },
 }))
 
+// blocks/* — blocking users is owned by the feed service (it's the only place blocks
+// take effect so far). Same auth + header forwarding + pathRewrite as /feed.
+router.use("/blocks", authenticate, createProxyMiddleware({
+    target: SERVICE_TARGETS.feed,
+    changeOrigin: true,
+    pathRewrite: (path) => `/blocks${path}`,
+    on: { proxyReq: attachProxyHeaders },
+}))
+
 export default router

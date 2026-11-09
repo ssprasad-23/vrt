@@ -8,12 +8,20 @@ import pool from '../config/configDB.js'
 // previous page, so new uploads arriving mid-scroll don't shift pages and cause
 // repeats the way OFFSET would. video_id breaks ties between identical timestamps.
 // created_at::text keeps full microsecond precision for the next cursor.
-export const getFeedPage = async (limit, cursor) => {
-    const params = [limit]
-    let where = 'h264_s3_key IS NOT NULL'
+//
+// Blocks are one-way: the viewer doesn't see videos from users they blocked, but a blocked
+// user still sees the blocker's videos (posted videos are public). Filtering here (not
+// after the query) keeps pages full and the cursor correct.
+export const getFeedPage = async (limit, cursor, viewerId) => {
+    const params = [limit, viewerId]
+    let where = `h264_s3_key IS NOT NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM user_blocks b
+               WHERE b.blocker_id = $2 AND b.blocked_id = videos.user_id
+           )`
     if (cursor) {
         params.push(cursor.createdAt, cursor.videoId)
-        where += ' AND (created_at, video_id) < ($2::timestamptz, $3)'
+        where += ' AND (created_at, video_id) < ($3::timestamptz, $4)'
     }
 
     const result = await pool.query(

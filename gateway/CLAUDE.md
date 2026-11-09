@@ -19,6 +19,7 @@ Express 5 reverse proxy using ES modules (`"type": "module"`). This is the singl
 - `/auth/*` → `auth` service, unauthenticated (see below), via `http-proxy-middleware`.
 - `/videos/*` → `upload` service, behind `src/middleware/authenticate.js`.
 - `/feed/*` → `feed` service (`GET /feed`, paginated video feed), behind the same `authenticate` + `attachProxyHeaders`, with the same `pathRewrite` as `/videos` (feed's router expects the full `/feed` path).
+- `/blocks/*` → `feed` service too (block/unblock/list users; feed owns `user_blocks`), same `authenticate` + `attachProxyHeaders` + `pathRewrite` pattern.
 
 **No body parsing** (`server.js`): deliberately no `express.json()`. This is a pure passthrough proxy — the request body is streamed straight to the upstream service untouched. Parsing it here would consume the stream and break proxying of POST/PUT bodies (there's no need to read the body at the gateway; identity comes from the `Authorization` header).
 

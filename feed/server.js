@@ -2,7 +2,9 @@ import express from "express";
 import dotenv from "dotenv";
 import db from "./src/config/configDB.js";
 import { connectRedis } from "./src/config/redisConfig.js";
+import initDb from "./src/data/createTable.js";
 import feedRouter from "./src/routes/feedRouters.js";
+import blockRouter from "./src/routes/blockRouters.js";
 import { log, logError } from "./src/utility/logger.js";
 
 dotenv.config();
@@ -12,6 +14,7 @@ const PORT = process.env.PORT || 3003;
 
 app.use(express.json());
 app.use("/", feedRouter);
+app.use("/", blockRouter);
 
 // centralized error handler (catches next(err) calls from the controller)
 app.use((err, req, res, next) => {
@@ -23,9 +26,10 @@ app.use((err, req, res, next) => {
 (async () => {
   try {
     // Verify DB connectivity. The videos table is owned (and created) by the upload
-    // service — this service only reads it, so there's no initDb() here.
+    // service — this service only reads it. initDb() creates user_blocks, which it owns.
     await db.query("SELECT 1");
     log("Feed database connected successfully");
+    await initDb();
 
     // Redis is optional (it only caches the first feed page), so unlike the DB check
     // above, a Redis outage doesn't stop the server from starting.

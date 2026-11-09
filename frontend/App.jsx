@@ -8,6 +8,7 @@ import VerifyCodePage from './src/screens/verifyCodePage';
 import NewPasswordPage from './src/screens/newPasswordPage';
 import Home from './src/screens/home';
 import UploadPage from './src/screens/uploadPage';
+import BlockedListPage from './src/screens/blockedListPage';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -57,6 +58,7 @@ export default function App() {
               <Stack.Screen name="NewPasswordPage" component={NewPasswordPage} />
               <Stack.Screen name="Home" component={Home} />
               <Stack.Screen name="UploadPage" component={UploadPage} presentation="modal" />
+              <Stack.Screen name="BlockedListPage" component={BlockedListPage} presentation="modal" />
             </Stack.Navigator>
           </NavigationContainer>
         )}

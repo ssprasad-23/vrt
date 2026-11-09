@@ -1,4 +1,5 @@
 import { getFeedPage } from "../models/feedModels.js"
+import { hasAnyBlocks } from "../models/blockModels.js"
 import { encodeCursor, decodeCursor } from "../utility/cursor.js"
 import redis from "../config/redisConfig.js"
 import { log, logError } from "../utility/logger.js"
@@ -15,8 +16,10 @@ const handleResponse = (res, status, message, data=null) => {
 const DEFAULT_PAGE_SIZE = 3
 const MAX_PAGE_SIZE = 20
 
-// The first page (no cursor, default limit) is the same for every user and requested on
-// every app open, so it's cached in Redis. Later pages aren't. See redis/README.md.
+// The first page (no cursor, default limit) is the same for every user without blocks and
+// requested on every app open, so it's cached in Redis. Later pages aren't. Users who have
+// blocked someone get a different page, so they skip the cache. See
+// redis/README.md.
 const FEED_FIRST_PAGE_KEY = "feed:first"
 const FEED_FIRST_PAGE_TTL_SECONDS = 30
 
@@ -56,13 +59,18 @@ export const getFeed = async (req, res, next) => {
         if (!cursor) return handleResponse(res, 400, "Invalid cursor")
     }
 
-    const cacheable = !cursor && limit === DEFAULT_PAGE_SIZE
+    const viewerId = req.user.userId
+    const firstPage = !cursor && limit === DEFAULT_PAGE_SIZE
 
     try {
         // X-Cache: HIT = served from Redis, MISS = from Postgres and now cached,
-        // BYPASS = Redis unavailable, from Postgres. Uncacheable pages get no header.
+        // BYPASS = Redis unavailable or the viewer has blocks, from Postgres.
+        // Uncacheable pages get no header.
         let cacheStatus
-        if (cacheable) {
+        if (firstPage && await hasAnyBlocks(viewerId)) {
+            cacheStatus = "BYPASS"
+            log(`Redis BYPASS: user ${viewerId} has blocks, serving their first feed page from Postgres (not cached)`)
+        } else if (firstPage) {
             const cached = await readFirstPageCache()
             if (cached) {
                 log(`Redis HIT: first feed page served from cache (${cached.videos.length} videos, key ${FEED_FIRST_PAGE_KEY})`)
@@ -78,7 +86,7 @@ export const getFeed = async (req, res, next) => {
         }
 
         // fetch one extra row to know whether another page exists without a COUNT query
-        const rows = await getFeedPage(limit + 1, cursor)
+        const rows = await getFeedPage(limit + 1, cursor, viewerId)
         const hasMore = rows.length > limit
         const page = hasMore ? rows.slice(0, limit) : rows
 

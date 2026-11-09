@@ -4,7 +4,7 @@ import {API_URL_IOS, API_URL_ANDROID} from '@env';
 import {getAccessToken, setAccessTokenExternal} from '../context/AuthContext';
 
 // Every backend call goes through the API gateway, which routes by path prefix:
-// /auth/* -> auth, /videos/* -> upload, /feed -> feed.
+// /auth/* -> auth, /videos/* -> upload, /feed and /blocks/* -> feed.
 const API_BASE_URL = Platform.OS === 'ios' ? API_URL_IOS : API_URL_ANDROID;
 
 // Endpoints that must never trigger a refresh-and-retry (they either don't

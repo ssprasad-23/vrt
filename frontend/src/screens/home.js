@@ -1,10 +1,12 @@
 import React, {useCallback, useEffect, useRef, useState} from "react";
-import {View, FlatList, useWindowDimensions, StatusBar, TouchableOpacity, Text, StyleSheet, Modal, Pressable, ActivityIndicator, RefreshControl} from "react-native";
+import {View, FlatList, useWindowDimensions, StatusBar, TouchableOpacity, Text, StyleSheet, Modal, Pressable, ActivityIndicator, RefreshControl, Alert} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
 import Post from "../components/Post";
 import apiClient from "../api/client";
 import {fetchFeed, toPost} from "../api/feed";
+import {blockUser, takeFeedStale} from "../api/blocks";
+import {getErrorMessage} from "../api/errors";
 import {useAuth} from "../context/AuthContext";
 import {stopTrackingUploads} from "../api/uploadStatus";
 
@@ -63,6 +65,13 @@ const Home = ({navigation}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Back from the Blocked List screen after unblocking someone: start the feed over so their
+  // videos come back.
+  useEffect(() => {
+    if (isFocused && takeFeedStale()) loadPage({reset: true});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocused]);
+
   // Rotating changes every item's offset (index * screenHeight); jump back to the video that
   // was on screen so the list doesn't land between two of them.
   useEffect(() => {
@@ -100,8 +109,54 @@ const Home = ({navigation}) => {
     navigation.navigate('UploadPage');
   };
 
+  const handleBlockedList = () => {
+    setMenuVisible(false);
+    navigation.navigate('BlockedListPage');
+  };
+
   // shown in the ⋮ menu for the video currently on screen; undefined while the feed is empty
   const activeVideoId = posts[activeIndex]?.id;
+  const activeUser = posts[activeIndex]?.user;
+
+  // Blocks the owner of the video on screen, then drops all their videos from the loaded feed
+  // (the server already filters them out of later pages). The next video slides into the
+  // blocked one's place.
+  const handleBlock = () => {
+    setMenuVisible(false);
+    if (!activeUser) return;
+    Alert.alert(
+      `Block @${activeUser.username}?`,
+      "You won't see their videos anymore. They won't be notified.",
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(activeUser.id);
+              const remaining = posts.filter(post => post.user.id !== activeUser.id);
+              // land on the video that came after the blocked one: its new index is how many
+              // kept videos were above it (their earlier videos are removed too)
+              const kept = posts.slice(0, activeIndex).filter(post => post.user.id !== activeUser.id).length;
+              const nextIndex = Math.min(kept, Math.max(remaining.length - 1, 0));
+              setPosts(remaining);
+              setActiveIndex(nextIndex);
+              if (remaining.length > 0) {
+                // wait for the shorter list to render before scrolling into it
+                requestAnimationFrame(() => flatListRef.current?.scrollToIndex({index: nextIndex, animated: false}));
+              } else if (hasMore) {
+                // they filled the whole loaded feed — fetch more instead of showing it empty
+                loadPage();
+              }
+            } catch (err) {
+              Alert.alert('Could not block user', getErrorMessage(err));
+            }
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -181,6 +236,18 @@ const Home = ({navigation}) => {
             )}
             <TouchableOpacity style={styles.menuItem} onPress={handleUpload} activeOpacity={0.7}>
               <Text style={styles.menuItemText}>Upload</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            {activeUser && (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={handleBlock} activeOpacity={0.7}>
+                  <Text style={[styles.menuItemText, styles.menuDangerText]}>Block This User</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+              </>
+            )}
+            <TouchableOpacity style={styles.menuItem} onPress={handleBlockedList} activeOpacity={0.7}>
+              <Text style={styles.menuItemText}>Blocked List</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={handleLogout} activeOpacity={0.7}>
@@ -266,6 +333,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  menuDangerText: {
+    color: '#FF3B30',
   },
   menuIdText: {
     color: 'rgba(255,255,255,0.6)',
