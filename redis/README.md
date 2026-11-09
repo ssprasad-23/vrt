@@ -4,7 +4,7 @@ Redis caches the **first page of the video feed**. It's used by the [`feed`](../
 
 ## Why the first feed page
 
-Opening the app sends `GET /feed?limit=3` with no cursor. The feed isn't personalised, so every user gets the same newest videos back from the same Postgres query. That one request is the most repeated read in the system, and its answer only changes when a new video finishes encoding. Serving it from Redis keeps that load off Postgres.
+Opening the app sends `GET /feed?limit=3` with no cursor. The feed isn't personalised beyond blocks, so every user without blocks gets the same newest videos back from the same Postgres query. Users with blocks (either direction) see a filtered page and skip the cache. That one request is the most repeated read in the system, and its answer only changes when a new video finishes encoding. Serving it from Redis keeps that load off Postgres.
 
 Later pages (requests with a `cursor`) are not cached. People stop scrolling at different points, so those requests rarely repeat.
 
@@ -28,7 +28,7 @@ Every first-page response carries an `X-Cache` header:
 |---|---|
 | `HIT` | Served from Redis; Postgres not touched |
 | `MISS` | Not cached: served from Postgres, then saved to Redis for 30s |
-| `BYPASS` | Redis unavailable: served from Postgres, nothing saved |
+| `BYPASS` | Redis unavailable, or the viewer has blocked someone / been blocked: served from Postgres, nothing saved |
 
 ### Fail-open
 
