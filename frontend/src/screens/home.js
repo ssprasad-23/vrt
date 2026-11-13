@@ -19,6 +19,9 @@ const Home = ({navigation}) => {
   const {height: screenHeight} = useWindowDimensions();
   const flatListRef = useRef(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  // videoId -> 0/90/180/270 from the menu's Rotate Left/Right. Only on this screen, for this
+  // session: not saved anywhere. Kept apart from `posts` so a refresh doesn't undo it.
+  const [rotations, setRotations] = useState({});
   const {setAccessToken} = useAuth();
   // pause the feed while another screen (e.g. the Upload modal) is on top
   const isFocused = useIsFocused();
@@ -123,6 +126,13 @@ const Home = ({navigation}) => {
   const activeVideoId = posts[activeIndex]?.id;
   const activeUser = posts[activeIndex]?.user;
 
+  // Turns the video on screen by 90° (delta -90 = left, 90 = right). Leaves the menu open so you
+  // can turn it again, or back, while watching it behind the overlay.
+  const handleRotate = delta => {
+    if (!activeVideoId) return;
+    setRotations(prev => ({...prev, [activeVideoId]: ((prev[activeVideoId] ?? 0) + delta + 360) % 360}));
+  };
+
   // Blocks the owner of the video on screen, then drops all their videos from the loaded feed
   // (the server already filters them out of later pages). The next video slides into the
   // blocked one's place.
@@ -176,7 +186,12 @@ const Home = ({navigation}) => {
           data={posts}
           keyExtractor={item => item.id}
           renderItem={({item, index}) => (
-            <Post post={item} height={screenHeight} isActive={isFocused && index === activeIndex} />
+            <Post
+              post={item}
+              height={screenHeight}
+              rotation={rotations[item.id] ?? 0}
+              isActive={isFocused && index === activeIndex}
+            />
           )}
           getItemLayout={(_, index) => ({length: screenHeight, offset: screenHeight * index, index})}
           snapToInterval={screenHeight}
@@ -247,6 +262,32 @@ const Home = ({navigation}) => {
               <Text style={styles.menuItemText}>My Videos</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
+            {activeVideoId && (
+              <>
+                <View style={[styles.menuItem, styles.menuRow]}>
+                  <Text style={styles.menuItemText}>Rotate</Text>
+                  <View style={styles.rotateButtons}>
+                    <TouchableOpacity
+                      style={styles.rotateButton}
+                      onPress={() => handleRotate(-90)}
+                      hitSlop={{top: 8, bottom: 8, left: 6, right: 6}}
+                      accessibilityLabel="Rotate left"
+                      activeOpacity={0.6}>
+                      <Text style={styles.rotateGlyph}>↺</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.rotateButton}
+                      onPress={() => handleRotate(90)}
+                      hitSlop={{top: 8, bottom: 8, left: 6, right: 6}}
+                      accessibilityLabel="Rotate right"
+                      activeOpacity={0.6}>
+                      <Text style={styles.rotateGlyph}>↻</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={styles.menuDivider} />
+              </>
+            )}
             <TouchableOpacity style={styles.menuItem} onPress={handleBlockedList} activeOpacity={0.7}>
               <Text style={styles.menuItemText}>My Blocked List</Text>
             </TouchableOpacity>
@@ -342,6 +383,33 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  // "Rotate" on the left, the ↺ ↻ buttons on the right; paddingVertical trimmed so the 28px
+  // buttons keep the row the same height as the others
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    paddingVertical: 10,
+  },
+  rotateButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  rotateButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  rotateGlyph: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   menuDangerText: {
     color: '#FF3B30',
