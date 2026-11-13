@@ -22,8 +22,6 @@ const MyVideoPlayerPage = ({navigation, route}) => {
     description: video.description,
     category: video.category,
     user: {username: 'you'},
-    likes: 0,
-    dislikes: 0,
   };
 
   const handleDelete = () => {

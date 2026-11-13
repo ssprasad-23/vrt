@@ -1,20 +1,16 @@
 import React from "react";
 import { useEffect, useState } from "react";
-import {View, Text, Image, TouchableOpacity, useWindowDimensions} from "react-native";
+import {View, Text, Image, useWindowDimensions} from "react-native";
 import Video from "react-native-video";
 import styles from "./styles";
 import { TouchableWithoutFeedback } from "react-native";
-import Entypo from "react-native-vector-icons/Entypo";
-import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Post = (props) => {
 
   const insets = useSafeAreaInsets();
   const screen = useWindowDimensions();
-  const [post, setPost] = useState(props.post);
-  const [isLiked, setIsLiked] = useState(false);
-  const [isDisliked, setIsDisliked] = useState(false);
+  const post = props.post;
   const [paused, setPaused] = useState(false);
   const [videoSize, setVideoSize] = useState(null);
 
@@ -45,26 +41,6 @@ const Post = (props) => {
     setPaused(!paused);
   }
 
-  const onLikePress = () => {
-    setPost({
-      ...post,
-      likes: post.likes + (isLiked ? -1 : 1),
-      dislikes: isDisliked ? post.dislikes - 1 : post.dislikes,
-    });
-    setIsLiked(!isLiked);
-    setIsDisliked(false);
-  }
-
-  const onDislikePress = () => {
-    setPost({
-      ...post,
-      dislikes: post.dislikes + (isDisliked ? -1 : 1),
-      likes: isLiked ? post.likes - 1 : post.likes,
-    });
-    setIsDisliked(!isDisliked);
-    setIsLiked(false);
-  }
-
   return (
     <View style = {[styles.container, {height: props.height ?? screen.height}]}>
       <TouchableWithoutFeedback onPress={onPlayPausePress}>
@@ -88,17 +64,6 @@ const Post = (props) => {
 
 
       <View style = {[styles.uiContainer, sideInsets]}>
-        <View style = {[styles.rightContainer, {right: insets.right}]}>
-          <TouchableOpacity style={styles.actionButton} onPress={onLikePress}>
-            <Entypo style = {styles.heart} name='heart' size={30} color={isLiked ? '#FF3B30' : 'white'}/>
-            <Text style={styles.actionLabel}>{post.likes}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={onDislikePress}>
-            <MaterialCommunityIcons style = {styles.heart} name='heart-broken' size={30} color={isDisliked ? '#000000' : 'white'}/>
-            <Text style={styles.actionLabel}>{post.dislikes}</Text>
-          </TouchableOpacity>
-        </View>
-
         <View style = {styles.bottomContainer}>
           <Text style = {styles.handle}>@{post.user.username}</Text>
           <Text style = {styles.description}>{post.description}</Text>

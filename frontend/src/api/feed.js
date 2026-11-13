@@ -25,6 +25,4 @@ export const toPost = video => ({
   description: video.description,
   category: video.category,
   user: {id: video.userId, username: `user${video.userId}`},
-  likes: 0,
-  dislikes: 0,
 });

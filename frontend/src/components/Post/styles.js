@@ -18,7 +18,6 @@ const styles = StyleSheet.create({
     },
     bottomContainer: {
         padding: 16,
-        paddingRight: 72,
         justifyContent: "flex-end",
         alignItems: "flex-start",
     },
@@ -40,30 +39,6 @@ const styles = StyleSheet.create({
         textShadowColor: "rgba(0,0,0,0.65)",
         textShadowOffset: {width: 0, height: 1},
         textShadowRadius: 4,
-    },
-    rightContainer: {
-        alignSelf: "flex-end",
-        position: "absolute",
-        justifyContent: "center",
-        alignItems: "center",
-        gap: 15,
-        padding: 15,
-        bottom: 10,
-    },
-    actionButton: {
-        alignItems: "center",
-    },
-    actionLabel: {
-        color: "#fff",
-        fontSize: 12,
-        fontWeight: "500",
-        marginTop: 4,
-        textShadowColor: "rgba(0,0,0,0.65)",
-        textShadowOffset: {width: 0, height: 1},
-        textShadowRadius: 4,
-    },
-    heart: {
-        textAlign: "center",
     },
     profilePic: {
         position: "absolute",

@@ -247,6 +247,10 @@ const Home = ({navigation}) => {
               <Text style={styles.menuItemText}>My Videos</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={handleBlockedList} activeOpacity={0.7}>
+              <Text style={styles.menuItemText}>My Blocked List</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
             {activeUser && (
               <>
                 <TouchableOpacity style={styles.menuItem} onPress={handleBlock} activeOpacity={0.7}>
@@ -255,10 +259,6 @@ const Home = ({navigation}) => {
                 <View style={styles.menuDivider} />
               </>
             )}
-            <TouchableOpacity style={styles.menuItem} onPress={handleBlockedList} activeOpacity={0.7}>
-              <Text style={styles.menuItemText}>Blocked List</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={handleLogout} activeOpacity={0.7}>
               <Text style={styles.menuItemText}>Log Out</Text>
             </TouchableOpacity>
