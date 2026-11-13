@@ -109,6 +109,11 @@ const Home = ({navigation}) => {
     navigation.navigate('UploadPage');
   };
 
+  const handleMyVideos = () => {
+    setMenuVisible(false);
+    navigation.navigate('MyVideosPage');
+  };
+
   const handleBlockedList = () => {
     setMenuVisible(false);
     navigation.navigate('BlockedListPage');
@@ -236,6 +241,10 @@ const Home = ({navigation}) => {
             )}
             <TouchableOpacity style={styles.menuItem} onPress={handleUpload} activeOpacity={0.7}>
               <Text style={styles.menuItemText}>Upload</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={handleMyVideos} activeOpacity={0.7}>
+              <Text style={styles.menuItemText}>My Videos</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             {activeUser && (

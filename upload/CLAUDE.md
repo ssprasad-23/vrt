@@ -15,7 +15,7 @@ No test runner is configured (`npm test` is a placeholder that exits with an err
 
 Express 5 REST API using ES modules (`"type": "module"` — use `import`/`export` throughout). Structure mirrors the sibling `auth` service (`../auth`).
 
-**Request flow**: `server.js` → `src/routes/videoRouters.js` → `src/middleware/authenticate.js` (gateway-secret check) → `src/controller/videoController.js` → `src/models/videoModels.js` (Postgres) / `src/utility/s3.js` (S3 presigned URLs). Routes are mounted at `/` in `server.js`, so paths are defined by the router itself (`POST /videos/upload-init`, `POST /videos/:id/complete`, `GET /videos/:id`).
+**Request flow**: `server.js` → `src/routes/videoRouters.js` → `src/middleware/authenticate.js` (gateway-secret check) → `src/controller/videoController.js` → `src/models/videoModels.js` (Postgres) / `src/utility/s3.js` (S3 presigned URLs). Routes are mounted at `/` in `server.js`, so paths are defined by the router itself (`GET /videos`, `POST /videos/upload-init`, `POST /videos/:id/complete`, `GET /videos/:id`, `DELETE /videos/:id`).
 
 **Startup sequence** (`server.js`): verifies DB connectivity with `SELECT 1`, calls `initDb()` (`src/data/createTable.js`) to create the `videos` table if absent, then starts the HTTP server. A centralized error-handling middleware (last `app.use` in `server.js`) catches anything passed to `next(err)` from controllers and responds with a generic 500.
 
@@ -45,6 +45,8 @@ One of the services in this monorepo (see `../README.md`). Identity comes from `
 
 **Complete upload** (`POST /videos/:id/complete`, protected): `completeUpload` → `findVideoById` → `404` if missing or not owned by the caller, `409` if not `pending` → `400` if the object isn't in the bucket yet (`getUploadedSize`, HeadObject) → `413` if it's over `MAX_UPLOAD_BYTES` (a presigned PUT can't cap size, so this is the real check: the object is deleted and the row marked `failed`) → `sendTranscodeJob(videoId, original_s3_key)` (`src/sqs/outgoing.js`) queues `{ videoId, key }` on the transcode SQS queue → `markVideoUploaded` (`status='uploaded'`, `uploaded_at=now()`) → `200` with the updated row. The send happens *before* the status update on purpose: if SQS is down the row stays `pending` and the client can just retry `/complete` (a duplicate message from a retry is harmless — the transcode worker skips completed jobs).
 
+**My videos / delete** (`GET /videos`, `DELETE /videos/:id`, both protected): `listMyVideos` returns the caller's uploads (`findVideosByUser`, newest first, up to 100) with `h264Key` and a `thumbnailKey` (first preview frame, named like transcode's `buildFrameKey`), both `null` until the H.264 encode is saved. `deleteVideo` → `404` if not the caller's, `409` while `pending`/`uploaded` → `deleteVideoById` (row first, so it leaves the feed) → `deleteVideoObjects` (`s3.js`: everything under `{videoId}/` in the original and media buckets).
+
 Full step-by-step tables live in `UPLOAD_FLOW.md`.
 
 ## Event/message contracts
@@ -67,7 +69,7 @@ Full step-by-step tables live in `UPLOAD_FLOW.md`.
 
 ## Local dev / run instructions
 
-Requires a running PostgreSQL instance, a local S3-compatible store (MinIO), and a `.env` file with: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `GATEWAY_SECRET` (must match the `gateway` service), plus `S3_ENDPOINT`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` (optionally `UPLOAD_URL_EXPIRY_SECONDS`, default 900) for `src/utility/s3.js`, plus `TRANSCODE_QUEUE_URL` and `SQS_ENDPOINT` (ElasticMQ locally) for queuing transcode jobs — without `TRANSCODE_QUEUE_URL`, `/complete` returns 500 and the video stays `pending`. Then:
+Requires a running PostgreSQL instance, a local S3-compatible store (MinIO), and a `.env` file with: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, `PORT`, `GATEWAY_SECRET` (must match the `gateway` service), plus `S3_ENDPOINT`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` (optionally `UPLOAD_URL_EXPIRY_SECONDS`, default 900, and `S3_MEDIA_BUCKET_NAME`, default `media`, which `DELETE /videos/:id` also clears) for `src/utility/s3.js`, plus `TRANSCODE_QUEUE_URL` and `SQS_ENDPOINT` (ElasticMQ locally) for queuing transcode jobs — without `TRANSCODE_QUEUE_URL`, `/complete` returns 500 and the video stays `pending`. Then:
 
 ```bash
 npm start        # run server

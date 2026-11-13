@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { log } from './logger.js';
 
@@ -11,6 +11,9 @@ const s3 = new S3Client({
   },
   forcePathStyle: true, // required for MinIO — it doesn't support virtual-hosted-style addressing
 });
+
+// Public bucket the transcode service writes encodes and preview frames to (same env var as transcode).
+const MEDIA_BUCKET = process.env.S3_MEDIA_BUCKET_NAME || 'media';
 
 const UPLOAD_URL_EXPIRY_SECONDS = Number(process.env.UPLOAD_URL_EXPIRY_SECONDS) || 900; // 15 min
 
@@ -39,6 +42,23 @@ export async function getUploadedSize(key) {
 // Removes an uploaded original, e.g. one rejected for being over the size limit.
 export async function deleteUploadedObject(key) {
   await s3.send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }));
+}
+
+// Deletes everything stored for a video: its folder ({videoId}/) in the original bucket and in
+// the media bucket (encodes + frames). Listed by prefix because encoded file names include their size.
+export async function deleteVideoObjects(videoId) {
+  for (const bucket of [process.env.S3_BUCKET_NAME, MEDIA_BUCKET]) {
+    let token;
+    do {
+      const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: `${videoId}/`, ContinuationToken: token }));
+      const objects = (listed.Contents ?? []).map(({ Key }) => ({ Key }));
+      if (objects.length) {
+        await s3.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects, Quiet: true } }));
+      }
+      token = listed.NextContinuationToken;
+    } while (token);
+  }
+  log(`Deleted stored files for video: ${videoId}`);
 }
 
 // Generates a pre-signed S3 URL that allows a client to upload a file
