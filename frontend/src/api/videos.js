@@ -12,3 +12,11 @@ export const deleteVideo = async videoId => {
   const res = await apiClient.delete(`/videos/${videoId}`);
   return res.data.data; // { videoId }
 };
+
+// POST /videos/:id/report — reason is 'sexual', 'child_safety' or 'hate_harassment_violence'.
+// Only records the report; the video stays in the feed. Reporting it again succeeds too.
+// 400 for your own video, 404 if it's gone.
+export const reportVideo = async (videoId, reason) => {
+  const res = await apiClient.post(`/videos/${videoId}/report`, {reason});
+  return res.data.data; // { videoId }
+};

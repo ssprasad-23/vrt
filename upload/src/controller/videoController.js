@@ -1,4 +1,4 @@
-import { createVideoService, findVideoById, findVideosByUser, deleteVideoById, markVideoUploaded, markVideoFailed } from "../models/videoModels.js"
+import { createVideoService, findVideoById, findVideosByUser, deleteVideoById, markVideoUploaded, markVideoFailed, addVideoReport } from "../models/videoModels.js"
 import { buildVideoKey, generateUploadUrl, getUploadedSize, deleteUploadedObject, deleteVideoObjects } from '../utility/s3.js';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, MAX_VIDEO_DURATION_SECONDS } from '../config/uploadLimits.js';
 import { generateVideoId } from '../utility/videoId.js';
@@ -163,6 +163,33 @@ export const deleteVideo = async (req, res, next) => {
         await deleteVideoById(video.video_id)
         await deleteVideoObjects(video.video_id)
         handleResponse(res, 200, "Video deleted", { videoId: video.video_id })
+    } catch (err) {
+        next(err)
+    }
+}
+
+
+// Reasons the app can report a video for. Same values as the CHECK on video_reports.reason.
+const REPORT_REASONS = ['sexual', 'child_safety', 'hate_harassment_violence']
+
+// POST /videos/:id/report { reason } — another user's live video. Only records the report for
+// now: the video stays in the feed. Reporting the same video again is a no-op that still succeeds.
+export const reportVideo = async (req, res, next) => {
+    const { reason } = req.body ?? {}
+    if (!REPORT_REASONS.includes(reason)) {
+        return handleResponse(res, 400, `reason must be one of: ${REPORT_REASONS.join(', ')}`)
+    }
+    try {
+        const video = await findVideoById(req.params.id)
+        if (!video || video.status !== 'ready') {
+            return handleResponse(res, 404, "Video not found")
+        }
+        if (video.user_id === req.user.userId) {
+            return handleResponse(res, 400, "You can't report your own video")
+        }
+        const added = await addVideoReport(video.video_id, req.user.userId, reason)
+        if (added) return handleResponse(res, 201, "Video reported", { videoId: video.video_id })
+        handleResponse(res, 200, "Video already reported", { videoId: video.video_id })
     } catch (err) {
         next(err)
     }
