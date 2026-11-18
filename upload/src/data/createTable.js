@@ -25,6 +25,11 @@ export default async function initDb() {
     log("Videos table already exists");
     await migrateEncodedKeys();
   }
+
+  // video_reports references videos, so it's created after it. All IF NOT EXISTS, so it's safe
+  // to run on every boot.
+  await db.query(fs.readFileSync(path.join(__dirname, "videoReportsTable.sql"), "utf8"));
+  log("Video reports table ready");
 }
 
 // Tables created before H.264 was added have a single transcoded_s3_key column (always AV1).

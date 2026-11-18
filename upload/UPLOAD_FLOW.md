@@ -84,3 +84,21 @@ If step 4 fails the files are orphaned, but nothing points at them. `transcode_j
   service, so there's no cross-service FK.
 - An upload that's started but never completed leaves its file in the `original`
   bucket. Nothing cleans those up yet.
+Its `video_reports` rows are removed with it (`ON DELETE CASCADE`).
+
+## Report a video — `POST /videos/:id/report`
+
+Body `{ reason }`, one of `sexual` | `child_safety` | `hate_harassment_violence`.
+
+| Step | Actor | Action |
+|---|---|---|
+| 1 | `videoController.js` | `400` if `reason` isn't one of the three |
+| 2 | `videoController.js` | `findVideoById` → `404` if missing or not `ready` |
+| 3 | `videoController.js` | `400 You can't report your own video` if the caller owns it |
+| 4 | `videoModels.js` | `addVideoReport` → `INSERT INTO video_reports ... ON CONFLICT DO NOTHING` |
+| 5 | `videoController.js` | `201 Video reported`, or `200 Video already reported` on a repeat, with `{ videoId }` |
+
+`video_reports` (`src/data/videoReportsTable.sql`, created on every boot with `IF NOT EXISTS`)
+has one row per reporter per video (`PRIMARY KEY (video_id, reporter_id)`). Reports are only
+recorded for now: the video stays `ready` and in the feed. A later step can count them to hide
+a video; the feed would then also need to filter on `status`, since it only checks `h264_s3_key`.

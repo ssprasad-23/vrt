@@ -36,6 +36,17 @@ export const deleteVideoById = async (videoId) => {
     return result.rows[0]
 }
 
+// Returns true if a new report was added, false if this user already reported this video.
+export const addVideoReport = async (videoId, reporterId, reason) => {
+    const result = await pool.query(
+        `INSERT INTO video_reports (video_id, reporter_id, reason)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [videoId, reporterId, reason]
+    )
+    return result.rowCount > 0
+}
+
 export const markVideoUploaded = async (videoId, originalSizeMb) => {
     const result = await pool.query(
         `UPDATE videos

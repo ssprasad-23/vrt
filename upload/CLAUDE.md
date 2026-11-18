@@ -15,13 +15,13 @@ No test runner is configured (`npm test` is a placeholder that exits with an err
 
 Express 5 REST API using ES modules (`"type": "module"` — use `import`/`export` throughout). Structure mirrors the sibling `auth` service (`../auth`).
 
-**Request flow**: `server.js` → `src/routes/videoRouters.js` → `src/middleware/authenticate.js` (gateway-secret check) → `src/controller/videoController.js` → `src/models/videoModels.js` (Postgres) / `src/utility/s3.js` (S3 presigned URLs). Routes are mounted at `/` in `server.js`, so paths are defined by the router itself (`GET /videos`, `POST /videos/upload-init`, `POST /videos/:id/complete`, `GET /videos/:id`, `DELETE /videos/:id`).
+**Request flow**: `server.js` → `src/routes/videoRouters.js` → `src/middleware/authenticate.js` (gateway-secret check) → `src/controller/videoController.js` → `src/models/videoModels.js` (Postgres) / `src/utility/s3.js` (S3 presigned URLs). Routes are mounted at `/` in `server.js`, so paths are defined by the router itself (`GET /videos`, `POST /videos/upload-init`, `POST /videos/:id/complete`, `GET /videos/:id`, `DELETE /videos/:id`, `POST /videos/:id/report`).
 
 **Startup sequence** (`server.js`): verifies DB connectivity with `SELECT 1`, calls `initDb()` (`src/data/createTable.js`) to create the `videos` table if absent, then starts the HTTP server. A centralized error-handling middleware (last `app.use` in `server.js`) catches anything passed to `next(err)` from controllers and responds with a generic 500.
 
 **Auth**: this service no longer verifies JWTs at all — the `gateway` service does that once, up front, and forwards the caller's identity as trusted headers. `src/middleware/authenticate.js` just checks `x-gateway-secret` matches `GATEWAY_SECRET` (must equal the gateway's value) and reads `req.user = { userId }` off `x-user-id` — no `jsonwebtoken` dependency, no `ACCESS_TOKEN_SECRET` here anymore. See `gateway/CLAUDE.md` for the full auth model.
 
-**Database** (`src/config/configDB.js`): exports a single `pg.Pool` instance. The service owns only its `videos` table and treats other services' tables as off-limits (no cross-service foreign keys; `videos.user_id` is a plain integer). Locally every service points at the same Postgres database; `feed` reads `videos` from it. Configured via `.env`: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, plus `PORT` for the HTTP server.
+**Database** (`src/config/configDB.js`): exports a single `pg.Pool` instance. The service owns only its `videos` and `video_reports` tables and treats other services' tables as off-limits (no cross-service foreign keys; `videos.user_id` is a plain integer). Locally every service points at the same Postgres database; `feed` reads `videos` from it. Configured via `.env`: `DB_USER`, `DB_HOST`, `DB_DATABASE`, `DB_PORT`, plus `PORT` for the HTTP server.
 
 **Schema** (`src/data/videosTable.sql`): `videos` table (`original_s3_key` = the upload's key in the private `original` bucket, `h264_s3_key` / `av1_s3_key` = the encoded files' keys in the public `media` bucket, each NULL until that output finishes (H.264 lands first; it's what the feed serves), `video_id VARCHAR(12) PRIMARY KEY`, `status`: `pending` (waiting for the file) → `uploaded` (queued/transcoding) → `ready` (H.264 saved — set by `setEncodedKey`) or `failed` with a user-facing `failure_reason`) with a `BEFORE UPDATE` trigger that auto-sets `updated_at`. `initDb()` checks for table existence before running the SQL (idempotent); on an existing table it also migrates the old single `transcoded_s3_key` column (always AV1) to `av1_s3_key` and adds `h264_s3_key`. Postgres can only append columns, so on a migrated table `h264_s3_key` lands last; the local dev table was rebuilt once (rows copied out, table recreated from `videosTable.sql`, rows copied back) so it sits right before `av1_s3_key` as in the SQL file. Column order is cosmetic — queries name their columns.
 
@@ -47,6 +47,8 @@ One of the services in this monorepo (see `../README.md`). Identity comes from `
 
 **My videos / delete** (`GET /videos`, `DELETE /videos/:id`, both protected): `listMyVideos` returns the caller's uploads (`findVideosByUser`, newest first, up to 100) with `h264Key` and a `thumbnailKey` (first preview frame, named like transcode's `buildFrameKey`), both `null` until the H.264 encode is saved. `deleteVideo` → `404` if not the caller's, `409` while `pending`/`uploaded` → `deleteVideoById` (row first, so it leaves the feed) → `deleteVideoObjects` (`s3.js`: everything under `{videoId}/` in the original and media buckets).
 
+**Report a video** (`POST /videos/:id/report`, protected): `reportVideo` → `400` unless `reason` is `sexual` / `child_safety` / `hate_harassment_violence` → `404` if the video is missing or not `ready` → `400` for your own video → `addVideoReport` (`videoModels.js`, `INSERT ... ON CONFLICT DO NOTHING`) → `201`, or `200` "already reported" on a repeat. `video_reports` (`src/data/videoReportsTable.sql`, `PRIMARY KEY (video_id, reporter_id)`, `video_id` references `videos` with `ON DELETE CASCADE`) is created by `initDb()` on every boot (`IF NOT EXISTS`). Reports are only recorded: nothing hides a reported video yet.
+
 Full step-by-step tables live in `UPLOAD_FLOW.md`.
 
 ## Event/message contracts
@@ -63,7 +65,7 @@ Full step-by-step tables live in `UPLOAD_FLOW.md`.
 - DB connection pool → `src/config/configDB.js`
 - S3 key generation + presigned URL generation → `src/utility/s3.js`
 - SQS client config → `src/config/sqsConfig.js`; sending transcode jobs → `src/sqs/outgoing.js`; receiving finished encodes → `src/sqs/incoming.js`
-- Table creation on startup → `src/data/createTable.js`, SQL in `src/data/videosTable.sql`
+- Table creation on startup → `src/data/createTable.js`, SQL in `src/data/videosTable.sql` and `src/data/videoReportsTable.sql`
 - Trust-the-gateway auth middleware (checks `x-gateway-secret`, reads identity off `x-user-id`) → `src/middleware/authenticate.js`
 - Server bootstrap, DB health check, global error handler → `server.js`
 
