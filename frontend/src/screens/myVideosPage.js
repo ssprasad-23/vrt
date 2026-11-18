@@ -77,7 +77,7 @@ const MyVideosPage = ({navigation}) => {
   const removeVideo = videoId => setVideos(prev => prev.filter(video => video.videoId !== videoId));
 
   const handleDelete = videoId => {
-    Alert.alert('Delete this video?', "It'll be removed from the feed. This can't be undone.", [
+    Alert.alert('Delete this video?',"This video will be permanently deleted.", [
       {text: 'Cancel', style: 'cancel'},
       {
         text: 'Delete',
