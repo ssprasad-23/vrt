@@ -16,6 +16,26 @@ export const findVideoById = async (videoId) => {
     return result.rows[0]
 }
 
+// The owner's uploads, newest first, for the My Videos screen.
+export const findVideosByUser = async (userId, limit = 100) => {
+    const result = await pool.query(
+        `SELECT video_id, description, category, status, failure_reason, h264_s3_key, created_at
+         FROM videos
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [userId, limit]
+    )
+    return result.rows
+}
+
+export const deleteVideoById = async (videoId) => {
+    const result = await pool.query(
+        'DELETE FROM videos WHERE video_id = $1 RETURNING video_id', [videoId]
+    )
+    return result.rows[0]
+}
+
 export const markVideoUploaded = async (videoId, originalSizeMb) => {
     const result = await pool.query(
         `UPDATE videos

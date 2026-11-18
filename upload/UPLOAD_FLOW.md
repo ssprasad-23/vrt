@@ -57,6 +57,27 @@ Owner only (`404` otherwise). Returns `{ videoId, status, failureReason }`, wher
 `status` is `pending` | `uploaded` (processing) | `ready` | `failed`. The app polls
 this every 5s after an upload to tell the user when the video is live or why it failed.
 
+## My videos — `GET /videos`
+
+Returns the caller's own uploads, newest first (up to 100), as
+`{ videos: [{ videoId, description, category, status, failureReason, createdAt, h264Key, thumbnailKey }] }`.
+The app's My Videos grid shows them. `h264Key` (the playable file in the media bucket) and
+`thumbnailKey` (the first preview frame, `{videoId}/frames/{videoId}_frame001.jpg`, built the
+same way as transcode's `buildFrameKey`) are `null` until the H.264 encode is saved.
+
+## Delete a video — `DELETE /videos/:id`
+
+| Step | Actor | Action |
+|---|---|---|
+| 1 | `videoController.js` | `findVideoById` → `404` if missing or not the caller's |
+| 2 | `videoController.js` | `409` if `status` is `pending` or `uploaded` (the transcode worker could still write files) |
+| 3 | `videoModels.js` | `deleteVideoById` → the row goes first, so the video leaves the feed right away |
+| 4 | `s3.js` | `deleteVideoObjects` → deletes everything under `{videoId}/` in the original bucket and the media bucket (`S3_MEDIA_BUCKET_NAME`, default `media`) |
+| 5 | `videoController.js` | `200` with `{ videoId }` |
+
+If step 4 fails the files are orphaned, but nothing points at them. `transcode_jobs` rows
+(owned by transcode) are left as history.
+
 ## Notes
 
 - `videos.user_id` is a plain integer, not a foreign key. Identity belongs to the auth

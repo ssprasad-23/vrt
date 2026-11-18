@@ -1,5 +1,5 @@
-import { createVideoService, findVideoById, markVideoUploaded, markVideoFailed } from "../models/videoModels.js"
-import { buildVideoKey, generateUploadUrl, getUploadedSize, deleteUploadedObject } from '../utility/s3.js';
+import { createVideoService, findVideoById, findVideosByUser, deleteVideoById, markVideoUploaded, markVideoFailed } from "../models/videoModels.js"
+import { buildVideoKey, generateUploadUrl, getUploadedSize, deleteUploadedObject, deleteVideoObjects } from '../utility/s3.js';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, MAX_VIDEO_DURATION_SECONDS } from '../config/uploadLimits.js';
 import { generateVideoId } from '../utility/videoId.js';
 import { sendTranscodeJob } from '../sqs/outgoing.js';
@@ -115,6 +115,54 @@ export const getVideoStatus = async (req, res, next) => {
             status: video.status,
             failureReason: video.failure_reason,
         })
+    } catch (err) {
+        next(err)
+    }
+}
+
+
+// First preview frame in the media bucket, used as the video's thumbnail. Same naming as the
+// transcode service's buildFrameKey(videoId, 1) (transcode/src/utility/s3.js). Frames are saved
+// before the encodes, so it exists once h264_s3_key is set.
+const buildThumbnailKey = videoId => `${videoId}/frames/${videoId}_frame001.jpg`
+
+// GET /videos — the caller's own uploads, newest first, for the app's My Videos screen.
+export const listMyVideos = async (req, res, next) => {
+    try {
+        const videos = await findVideosByUser(req.user.userId)
+        handleResponse(res, 200, "Your videos", {
+            videos: videos.map(video => ({
+                videoId: video.video_id,
+                description: video.description,
+                category: video.category,
+                status: video.status,
+                failureReason: video.failure_reason,
+                createdAt: video.created_at,
+                h264Key: video.h264_s3_key,
+                thumbnailKey: video.h264_s3_key ? buildThumbnailKey(video.video_id) : null,
+            })),
+        })
+    } catch (err) {
+        next(err)
+    }
+}
+
+
+// DELETE /videos/:id — owner only. Not while it's still processing: the transcode worker could
+// upload files after the delete. The row goes first so the video leaves the feed right away; if
+// the storage delete then fails, the files are orphaned but nothing points at them.
+export const deleteVideo = async (req, res, next) => {
+    try {
+        const video = await findVideoById(req.params.id)
+        if (!video || video.user_id !== req.user.userId) {
+            return handleResponse(res, 404, "Video not found")
+        }
+        if (video.status === 'pending' || video.status === 'uploaded') {
+            return handleResponse(res, 409, "Video is still processing — try again once it's done")
+        }
+        await deleteVideoById(video.video_id)
+        await deleteVideoObjects(video.video_id)
+        handleResponse(res, 200, "Video deleted", { videoId: video.video_id })
     } catch (err) {
         next(err)
     }
