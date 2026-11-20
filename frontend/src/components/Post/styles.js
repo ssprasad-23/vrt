@@ -65,6 +65,24 @@ const styles = StyleSheet.create({
         marginTop: -12,
         zIndex: 1,
     },
+    // times sit just above the bar without moving it off the 80% line
+    progressTimes: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: "100%",
+        flexDirection: "row",
+        justifyContent: "space-between",
+    },
+    progressTime: {
+        color: "#fff",
+        fontSize: 12,
+        fontWeight: "500",
+        fontVariant: ["tabular-nums"],
+        textShadowColor: "rgba(0,0,0,0.65)",
+        textShadowOffset: {width: 0, height: 1},
+        textShadowRadius: 4,
+    },
     // taller than the track so it's easy to hit; the track sits in its middle
     progressTouchArea: {
         height: 24,

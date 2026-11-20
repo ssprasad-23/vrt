@@ -144,7 +144,7 @@ const Post = (props) => {
       {/* outside the rotated <Video>, so it stays at the same spot on screen whatever the rotation */}
       {duration > 0 && (
         <View style = {[styles.progressContainer, sideInsets]}>
-          <ProgressBar progress = {progress} buffered = {buffered} onSeekStart = {onSeekStart} onSeek = {setProgress} onSeekEnd = {onSeekEnd} />
+          <ProgressBar progress = {progress} buffered = {buffered} duration = {duration} onSeekStart = {onSeekStart} onSeek = {setProgress} onSeekEnd = {onSeekEnd} />
         </View>
       )}
 
