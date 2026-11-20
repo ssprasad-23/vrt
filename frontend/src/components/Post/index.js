@@ -1,8 +1,9 @@
 import React from "react";
-import { useEffect, useState } from "react";
-import {View, Text, Image, useWindowDimensions} from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {View, Text, Image, ActivityIndicator, useWindowDimensions} from "react-native";
 import Video from "react-native-video";
 import styles from "./styles";
+import ProgressBar from "./ProgressBar";
 import { TouchableWithoutFeedback } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,9 +14,34 @@ const Post = (props) => {
   const post = props.post;
   const [paused, setPaused] = useState(false);
   const [videoSize, setVideoSize] = useState(null);
+  const videoRef = useRef(null);
+  const [duration, setDuration] = useState(0);
+  const [progress, setProgress] = useState(0);
+  // how much has loaded (0–1), drawn as a lighter layer on the bar
+  const [buffered, setBuffered] = useState(0);
+  const [isBuffering, setIsBuffering] = useState(false);
+  // while scrubbing, the bar follows the finger rather than onProgress
+  const seekingRef = useRef(false);
+  // what the native player is really doing (null until it first reports). It can drift from
+  // `paused` after a seek: iOS pauses the player to seek, and a seek into an unloaded part can stall.
+  const isPlayingRef = useRef(null);
 
-  const onVideoLoad = ({naturalSize}) => {
+  const onVideoLoad = ({naturalSize, duration}) => {
     if (naturalSize?.width && naturalSize?.height) setVideoSize(naturalSize);
+    if (duration > 0) setDuration(duration);
+  };
+
+  const onVideoProgress = ({currentTime, playableDuration}) => {
+    if (!(duration > 0)) return;
+    setBuffered(playableDuration / duration);
+    if (!seekingRef.current) setProgress(currentTime / duration);
+  };
+
+  const onSeekStart = () => { seekingRef.current = true; };
+  const onSeekEnd = (fraction) => {
+    setProgress(fraction);
+    videoRef.current?.seek(fraction * duration);
+    seekingRef.current = false;
   };
 
   // Fill the screen ('cover') when the video and the screen have the same orientation — a
@@ -51,23 +77,44 @@ const Post = (props) => {
 
   // scrolling away resets tap-to-pause, so the video plays again when scrolled back to
   useEffect(() => {
-    if (!isActive) setPaused(false);
+    if (!isActive) {
+      setPaused(false);
+      setProgress(0);
+      setBuffered(0);
+      setIsBuffering(false);
+    }
   }, [isActive]);
 
   const onPlayPausePress = () => {
+    // we think it's playing but the player has stopped: one tap should start it, not "pause" it
+    if (!paused && !isBuffering && isPlayingRef.current === false) {
+      videoRef.current?.resume();
+      return;
+    }
     setPaused(!paused);
   }
+
+  // a seek can leave the player stopped (see isPlayingRef), so start it again unless the user paused
+  const onVideoSeek = () => {
+    if (!paused && isActive) videoRef.current?.resume();
+  };
 
   return (
     <View style = {[styles.container, {height: containerHeight}]}>
       <TouchableWithoutFeedback onPress={onPlayPausePress}>
         <Video
-        style = {[styles.video, rotatedStyle]}
+          ref = {videoRef}
+          style = {[styles.video, rotatedStyle]}
           source = {{ uri: post.videoUri }}
           // source = {{ uri: 'https://assets.mixkit.co/videos/1259/1259-720.mp4' }}
           // source = {{ uri: 'https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4' }}
           onError={(e) => console.log(e)}
           onLoad = {onVideoLoad}
+          onProgress = {onVideoProgress}
+          progressUpdateInterval = {250}
+          onBuffer = {({isBuffering}) => setIsBuffering(isBuffering)}
+          onSeek = {onVideoSeek}
+          onPlaybackStateChanged = {({isPlaying}) => { isPlayingRef.current = isPlaying; }}
           resizeMode = {resizeMode}
           repeat = {true}
           paused = {paused || !isActive}
@@ -86,6 +133,20 @@ const Post = (props) => {
           <Text style = {styles.description}>{post.description}</Text>
         </View>
       </View>
+
+      {/* inactive or paused videos can report buffering too, so only show it for the playing one */}
+      {isBuffering && isActive && !paused && (
+        <View style = {styles.bufferingOverlay} pointerEvents = "none">
+          <ActivityIndicator size = "large" color = "#fff" />
+        </View>
+      )}
+
+      {/* outside the rotated <Video>, so it stays at the same spot on screen whatever the rotation */}
+      {duration > 0 && (
+        <View style = {[styles.progressContainer, sideInsets]}>
+          <ProgressBar progress = {progress} buffered = {buffered} duration = {duration} onSeekStart = {onSeekStart} onSeek = {setProgress} onSeekEnd = {onSeekEnd} />
+        </View>
+      )}
 
       {post.user.imageUri && (
         <Image style = {[styles.profilePic, {top: avatarTop, left: 16 + insets.left}]} source={{uri: post.user.imageUri}}/>
