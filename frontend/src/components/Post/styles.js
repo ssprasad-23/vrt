@@ -49,10 +49,16 @@ const styles = StyleSheet.create({
         borderWidth: 0.5,
         borderColor: "rgba(255,255,255,0.3)",
     },
+    // centred spinner while the playing video waits for data
+    bufferingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: "center",
+        alignItems: "center",
+    },
     // 80% down the screen, above the handle/description; marginTop centres the track on that line
     progressContainer: {
         position: "absolute",
-        // inset to line up with the handle/description text
+        // inset from the screen edges
         left: 30,
         right: 30,
         top: "80%",
@@ -64,17 +70,28 @@ const styles = StyleSheet.create({
         height: 24,
         justifyContent: "center",
     },
+    // no background of its own: the unloaded part is empty, so only the loaded and played layers show
     progressTrack: {
         height: 2,
         borderRadius: 2,
         overflow: "hidden",
-        backgroundColor: "rgba(255,255,255,0.3)",
     },
     progressTrackActive: {
         height: 4,
     },
+    // loaded so far; sits under the played fill
+    progressBuffered: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
+        backgroundColor: "rgba(255,255,255,0.5)",
+    },
     progressFill: {
-        height: "100%",
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
         backgroundColor: "#fff",
     },
     progressThumb: {

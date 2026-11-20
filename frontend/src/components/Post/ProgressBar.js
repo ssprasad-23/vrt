@@ -5,9 +5,10 @@ import styles from "./styles";
 
 const clamp = (n) => Math.min(Math.max(n, 0), 1);
 
-// Thin bar along the bottom of a feed video. Tap or drag it to seek; it thickens while dragging.
-// `progress` is 0–1; the callbacks get the touched position as a 0–1 fraction.
-const ProgressBar = ({ progress, onSeekStart, onSeek, onSeekEnd }) => {
+// Thin bar across a feed video. Tap or drag it to seek; it thickens while dragging.
+// `progress` (played) and `buffered` (loaded, drawn lighter underneath) are 0–1; the callbacks get
+// the touched position as a 0–1 fraction.
+const ProgressBar = ({ progress, buffered = 0, onSeekStart, onSeek, onSeekEnd }) => {
   const [dragging, setDragging] = useState(false);
   const width = useRef(0);
   const startX = useRef(0);
@@ -52,6 +53,7 @@ const ProgressBar = ({ progress, onSeekStart, onSeek, onSeekEnd }) => {
       {...panResponder.panHandlers}
     >
       <View style = {[styles.progressTrack, dragging && styles.progressTrackActive]}>
+        <View style = {[styles.progressBuffered, {width: `${clamp(buffered) * 100}%`}]} />
         <View style = {[styles.progressFill, {width: percent}]} />
       </View>
       {dragging && <View style = {[styles.progressThumb, {left: percent}]} />}
