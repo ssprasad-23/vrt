@@ -1,8 +1,9 @@
 import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {View, Text, Image, useWindowDimensions} from "react-native";
 import Video from "react-native-video";
 import styles from "./styles";
+import ProgressBar from "./ProgressBar";
 import { TouchableWithoutFeedback } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,9 +14,26 @@ const Post = (props) => {
   const post = props.post;
   const [paused, setPaused] = useState(false);
   const [videoSize, setVideoSize] = useState(null);
+  const videoRef = useRef(null);
+  const [duration, setDuration] = useState(0);
+  const [progress, setProgress] = useState(0);
+  // while scrubbing, the bar follows the finger rather than onProgress
+  const seekingRef = useRef(false);
 
-  const onVideoLoad = ({naturalSize}) => {
+  const onVideoLoad = ({naturalSize, duration}) => {
     if (naturalSize?.width && naturalSize?.height) setVideoSize(naturalSize);
+    if (duration > 0) setDuration(duration);
+  };
+
+  const onVideoProgress = ({currentTime}) => {
+    if (!seekingRef.current && duration > 0) setProgress(currentTime / duration);
+  };
+
+  const onSeekStart = () => { seekingRef.current = true; };
+  const onSeekEnd = (fraction) => {
+    setProgress(fraction);
+    videoRef.current?.seek(fraction * duration);
+    seekingRef.current = false;
   };
 
   // Fill the screen ('cover') when the video and the screen have the same orientation — a
@@ -51,7 +69,10 @@ const Post = (props) => {
 
   // scrolling away resets tap-to-pause, so the video plays again when scrolled back to
   useEffect(() => {
-    if (!isActive) setPaused(false);
+    if (!isActive) {
+      setPaused(false);
+      setProgress(0);
+    }
   }, [isActive]);
 
   const onPlayPausePress = () => {
@@ -62,12 +83,15 @@ const Post = (props) => {
     <View style = {[styles.container, {height: containerHeight}]}>
       <TouchableWithoutFeedback onPress={onPlayPausePress}>
         <Video
-        style = {[styles.video, rotatedStyle]}
+          ref = {videoRef}
+          style = {[styles.video, rotatedStyle]}
           source = {{ uri: post.videoUri }}
           // source = {{ uri: 'https://assets.mixkit.co/videos/1259/1259-720.mp4' }}
           // source = {{ uri: 'https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4' }}
           onError={(e) => console.log(e)}
           onLoad = {onVideoLoad}
+          onProgress = {onVideoProgress}
+          progressUpdateInterval = {250}
           resizeMode = {resizeMode}
           repeat = {true}
           paused = {paused || !isActive}
@@ -86,6 +110,13 @@ const Post = (props) => {
           <Text style = {styles.description}>{post.description}</Text>
         </View>
       </View>
+
+      {/* outside the rotated <Video>, so it stays at the same spot on screen whatever the rotation */}
+      {duration > 0 && (
+        <View style = {[styles.progressContainer, sideInsets]}>
+          <ProgressBar progress = {progress} onSeekStart = {onSeekStart} onSeek = {setProgress} onSeekEnd = {onSeekEnd} />
+        </View>
+      )}
 
       {post.user.imageUri && (
         <Image style = {[styles.profilePic, {top: avatarTop, left: 16 + insets.left}]} source={{uri: post.user.imageUri}}/>
